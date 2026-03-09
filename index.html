@@ -12,31 +12,7 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
 
-  <!-- Firebase -->
-  <script type="module">
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/11.9.0/firebase-app.js";
-    import {
-      getFirestore, collection, doc, getDocs, addDoc, setDoc, deleteDoc,
-      onSnapshot, query, orderBy
-    } from "https://www.gstatic.com/firebasejs/11.9.0/firebase-firestore.js";
 
-    const firebaseConfig = {
-      apiKey:            "AIzaSyANMpH5oor6DOuy5IaiU5LxLxxX5Vb5bik",
-      authDomain:        "basetransportesmelgar.firebaseapp.com",
-      projectId:         "basetransportesmelgar",
-      storageBucket:     "basetransportesmelgar.firebasestorage.app",
-      messagingSenderId: "440678791212",
-      appId:             "1:440678791212:web:a45ca9a46a7c285fab7989"
-    };
-
-    const app = initializeApp(firebaseConfig);
-    const db  = getFirestore(app);
-
-    window._firebase = { db, collection, doc, getDocs, addDoc, setDoc, deleteDoc, onSnapshot, query, orderBy };
-    window._firebaseReady = true;
-    // Resolver la promesa que el JS principal está esperando
-    if (window._fbResolve) window._fbResolve();
-  </script>
 
 
 
@@ -731,7 +707,7 @@ tbody td { padding: .85rem 1rem; color: var(--text-primary); white-space: nowrap
       <label>Contraseña</label>
       <input type="password" id="login-pass" placeholder="••••••••" autocomplete="current-password">
     </div>
-    <button class="btn btn-primary btn-full" style="margin-top:.5rem" onclick="doLogin()">
+    <button class="btn btn-primary btn-full" id="login-btn" style="margin-top:.5rem" onclick="doLogin()">
       Iniciar Sesión
     </button>
     <p style="text-align:center;font-size:.75rem;color:var(--text-muted);margin-top:1.25rem">
@@ -1335,42 +1311,37 @@ const DB = {
   },
 };
 
-// ── Esperar a que Firebase esté listo ──
+// ── Esperar a que Firebase esté listo (polling robusto) ──
 const _fbReady = new Promise(resolve => {
-  if (window._firebaseReady) { resolve(); }
-  else { window._fbResolve = resolve; }
+  const check = () => {
+    if (window._firebaseReady && window._db) { resolve(); }
+    else { setTimeout(check, 50); }
+  };
+  check();
 });
 
-// ── Helpers Firestore ──
-function _fs()  { return window._firebase; }
-function _fdb() { return window._firebase.db; }
+// ── Helpers Firestore (API compat) ──
+function _fdb() { return window._db; }
 
 async function fsGetAll(col) {
-  await _fbReady;
-  const { collection, getDocs } = _fs();
-  const snap = await getDocs(collection(_fdb(), col));
+  const snap = await _fdb().collection(col).get();
   return snap.docs.map(d => ({ id: d.id, ...d.data() }));
 }
 
 async function fsSet(col, id, data) {
-  await _fbReady;
-  const { doc, setDoc } = _fs();
   const d = { ...data }; delete d.id;
-  await setDoc(doc(_fdb(), col, id), d);
+  await _fdb().collection(col).doc(id).set(d);
 }
 
 async function fsDelete(col, id) {
-  await _fbReady;
-  const { doc, deleteDoc } = _fs();
-  await deleteDoc(doc(_fdb(), col, id));
+  await _fdb().collection(col).doc(id).delete();
 }
 
 // ── Suscripciones en tiempo real ──
 function subscribeAll() {
-  const { collection, onSnapshot, query, orderBy } = _fs();
-  const fdb = _fdb();
+  const db = _fdb();
 
-  onSnapshot(collection(fdb, 'choferes'), snap => {
+  db.collection('choferes').onSnapshot(snap => {
     _cache.choferes = snap.docs.map(d => ({ id: d.id, ...d.data() }));
     if (!_cache.choferes.find(c => c.id === 'c0')) _cache.choferes.unshift(ADMIN_DEFAULT);
     const pg = document.querySelector('.page.active');
@@ -1378,14 +1349,14 @@ function subscribeAll() {
     if (pg && pg.id === 'page-nuevo-reporte') initForm();
   });
 
-  onSnapshot(collection(fdb, 'unidades'), snap => {
+  db.collection('unidades').onSnapshot(snap => {
     _cache.unidades = snap.docs.map(d => ({ id: d.id, ...d.data() }));
     const pg = document.querySelector('.page.active');
     if (pg && pg.id === 'page-admin') renderAdmin();
     if (pg && pg.id === 'page-nuevo-reporte') initForm();
   });
 
-  onSnapshot(query(collection(fdb, 'reportes'), orderBy('fecha', 'desc')), snap => {
+  db.collection('reportes').orderBy('fecha', 'desc').onSnapshot(snap => {
     _cache.reportes = snap.docs.map(d => ({ id: d.id, ...d.data() }));
     const pg = document.querySelector('.page.active');
     if (pg && pg.id === 'page-dashboard') renderDashboard();
@@ -2351,5 +2322,21 @@ _fbReady.then(async () => {
 });
 
 </script>
+  <!-- Firebase compat — carga al final para no bloquear el HTML -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+  <script>
+    const firebaseConfig = {
+      apiKey:            "AIzaSyANMpH5oor6DOuy5IaiU5LxLxxX5Vb5bik",
+      authDomain:        "basetransportesmelgar.firebaseapp.com",
+      projectId:         "basetransportesmelgar",
+      storageBucket:     "basetransportesmelgar.firebasestorage.app",
+      messagingSenderId: "440678791212",
+      appId:             "1:440678791212:web:a45ca9a46a7c285fab7989"
+    };
+    firebase.initializeApp(firebaseConfig);
+    window._db = firebase.firestore();
+    window._firebaseReady = true;
+  </script>
 </body>
 </html>
