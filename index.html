@@ -12,6 +12,40 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
 
+  <!-- Firebase -->
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/11.9.0/firebase-app.js";
+    import {
+      getFirestore, collection, doc, getDocs, addDoc, setDoc, deleteDoc,
+      onSnapshot, query, orderBy
+    } from "https://www.gstatic.com/firebasejs/11.9.0/firebase-firestore.js";
+
+    // ════════════════════════════════════════════════════
+    //  🔧 PEGA AQUÍ TU CONFIGURACIÓN DE FIREBASE
+    //  Instrucciones: console.firebase.google.com
+    //  → Crear proyecto → Web app → Copiar firebaseConfig
+    // ════════════════════════════════════════════════════
+    const firebaseConfig = {
+      apiKey:            "AIzaSyANMpH5oor6DOuy5IaiU5LxLxxX5Vb5bik",
+      authDomain:        "basetransportesmelgar.firebaseapp.com",
+      projectId:         "basetransportesmelgar",
+      storageBucket:     "basetransportesmelgar.firebasestorage.app",
+      messagingSenderId: "440678791212",
+      appId:             "1:440678791212:web:a45ca9a46a7c285fab7989"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const db  = getFirestore(app);
+
+    // Exponer helpers al scope global para que el resto del JS los use
+    window._firebase = {
+      db,
+      collection, doc, getDocs, addDoc, setDoc, deleteDoc, onSnapshot, query, orderBy
+    };
+    window._firebaseReady = true;
+    document.dispatchEvent(new Event('firebase-ready'));
+  </script>
+
 
 
   <style>
@@ -1282,41 +1316,127 @@ tbody td { padding: .85rem 1rem; color: var(--text-primary); white-space: nowrap
 })();
 
 // ══════════════════════════════════════════════
-//  ESTADO GLOBAL — LocalStorage wrapper
+//  ESTADO GLOBAL — Caché en memoria + Firebase
 // ══════════════════════════════════════════════
-// Fallback en memoria si localStorage no está disponible
-const _mem = {};
-const _store = {
-  getItem: k => { try { return localStorage.getItem(k); } catch(e) { return _mem[k] || null; } },
-  setItem: (k,v) => { try { localStorage.setItem(k,v); } catch(e) { _mem[k]=v; } },
-};
-
-const DB = {
-  get choferes()  { return JSON.parse(_store.getItem('choferes') || '[]'); },
-  set choferes(v) { _store.setItem('choferes', JSON.stringify(v)); },
-  get unidades()  { return JSON.parse(_store.getItem('unidades') || '[]'); },
-  set unidades(v) { _store.setItem('unidades', JSON.stringify(v)); },
-  get reportes()  { return JSON.parse(_store.getItem('reportes') || '[]'); },
-  set reportes(v) { _store.setItem('reportes', JSON.stringify(v)); },
-  get sesion()    { return JSON.parse(_store.getItem('sesionActual') || 'null'); },
-  set sesion(v)   { _store.setItem('sesionActual', JSON.stringify(v)); },
-};
-
-// ── DATOS POR DEFECTO ──
 const ADMIN_DEFAULT = { id: 'c0', nombre: 'Administrador', username: 'admin', password: 'admin123', rol: 'admin' };
 
-function initDefaults() {
-  // Siempre garantizar que el admin exista
-  const choferes = DB.choferes;
-  if (!choferes.find(c => c.id === 'c0')) {
-    DB.choferes = [ADMIN_DEFAULT, ...choferes];
+// Caché local (se sincroniza con Firestore)
+const _cache = { choferes: [], unidades: [], reportes: [] };
+
+// Sesión: solo en localStorage (no viaja a la nube)
+const _mem = {};
+const _sessionStore = {
+  getItem: k => { try { return localStorage.getItem(k); } catch(e) { return _mem[k] || null; } },
+  setItem: (k,v) => { try { localStorage.setItem(k,v); } catch(e) { _mem[k]=v; } },
+  removeItem: k => { try { localStorage.removeItem(k); } catch(e) { delete _mem[k]; } },
+};
+const _store = _sessionStore; // alias para compatibilidad
+
+const DB = {
+  get choferes()  { return _cache.choferes; },
+  get unidades()  { return _cache.unidades; },
+  get reportes()  { return _cache.reportes; },
+  get sesion()    { return JSON.parse(_sessionStore.getItem('sesionActual') || 'null'); },
+  set sesion(v)   { 
+    if (v === null) _sessionStore.removeItem('sesionActual');
+    else _sessionStore.setItem('sesionActual', JSON.stringify(v)); 
+  },
+};
+
+// ── Helpers Firestore ──
+function _fs()  { return window._firebase; }
+function _fdb() { return window._firebase.db; }
+
+async function fsGetAll(col) {
+  const { collection, getDocs } = _fs();
+  const snap = await getDocs(collection(_fdb(), col));
+  return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+}
+
+async function fsSet(col, id, data) {
+  const { doc, setDoc } = _fs();
+  const d = { ...data };
+  delete d.id;
+  await setDoc(doc(_fdb(), col, id), d);
+}
+
+async function fsAdd(col, data) {
+  const { collection, addDoc } = _fs();
+  const d = { ...data };
+  delete d.id;
+  const ref = await addDoc(collection(_fdb(), col), d);
+  return ref.id;
+}
+
+async function fsDelete(col, id) {
+  const { doc, deleteDoc } = _fs();
+  await deleteDoc(doc(_fdb(), col, id));
+}
+
+// ── Suscripciones en tiempo real ──
+function subscribeAll() {
+  const { collection, onSnapshot, query, orderBy } = _fs();
+  const fdb = _fdb();
+
+  onSnapshot(collection(fdb, 'choferes'), snap => {
+    _cache.choferes = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    // Garantizar admin hardcodeado
+    if (!_cache.choferes.find(c => c.id === 'c0')) {
+      _cache.choferes.unshift(ADMIN_DEFAULT);
+    }
+    // Refrescar UI si está activa
+    const pg = document.querySelector('.page.active');
+    if (pg) {
+      if (pg.id === 'page-admin') renderAdmin();
+      if (pg.id === 'page-nuevo-reporte') initForm();
+    }
+  });
+
+  onSnapshot(collection(fdb, 'unidades'), snap => {
+    _cache.unidades = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    const pg = document.querySelector('.page.active');
+    if (pg) {
+      if (pg.id === 'page-admin') renderAdmin();
+      if (pg.id === 'page-nuevo-reporte') initForm();
+    }
+  });
+
+  onSnapshot(query(collection(fdb, 'reportes'), orderBy('fecha', 'desc')), snap => {
+    _cache.reportes = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    const pg = document.querySelector('.page.active');
+    if (pg) {
+      if (pg.id === 'page-dashboard') renderDashboard();
+      if (pg.id === 'page-historial') renderHistorial();
+    }
+  });
+}
+
+// ── Carga inicial + suscripciones ──
+async function initDefaults() {
+  if (!window._firebaseReady) {
+    // Firebase aún no cargó, esperar
+    await new Promise(r => document.addEventListener('firebase-ready', r, { once: true }));
   }
-  if (!DB.unidades.length) {
-    DB.unidades = [
-      { id: 'u0', placa: 'TM-001', modelo: 'Kenworth T680' },
-      { id: 'u1', placa: 'TM-002', modelo: 'Freightliner Cascadia' },
-    ];
+
+  // Cargar datos iniciales en caché
+  const [choferes, unidades, reportes] = await Promise.all([
+    fsGetAll('choferes'),
+    fsGetAll('unidades'),
+    fsGetAll('reportes'),
+  ]);
+
+  _cache.choferes = choferes;
+  _cache.unidades = unidades;
+  _cache.reportes = reportes;
+
+  // Crear admin si no existe en Firestore
+  if (!_cache.choferes.find(c => c.id === 'c0')) {
+    await fsSet('choferes', 'c0', ADMIN_DEFAULT);
+    _cache.choferes.unshift(ADMIN_DEFAULT);
   }
+
+  // Activar escucha en tiempo real
+  subscribeAll();
 }
 
 // ══════════════════════════════════════════════
@@ -1352,17 +1472,35 @@ function closeModal(id) { document.getElementById(id).classList.remove('show'); 
 // ══════════════════════════════════════════════
 //  AUTENTICACIÓN
 // ══════════════════════════════════════════════
-function doLogin() {
-  initDefaults();
+async function doLogin() {
   const u = document.getElementById('login-user').value.trim();
   const p = document.getElementById('login-pass').value;
   if (!u || !p) { toast('Completa todos los campos', 'warning'); return; }
-  // Buscar en BD guardada + fallback al admin hardcodeado
-  const chofer = DB.choferes.find(c => c.username === u && c.password === p)
-               || (u === ADMIN_DEFAULT.username && p === ADMIN_DEFAULT.password ? ADMIN_DEFAULT : null);
-  if (!chofer) { toast('Credenciales incorrectas', 'error'); return; }
-  DB.sesion = { id: chofer.id, nombre: chofer.nombre, username: chofer.username, rol: chofer.rol };
-  showApp();
+
+  const btn = document.getElementById('login-btn');
+  btn.disabled = true;
+  btn.innerHTML = '<div class="spinner"></div> Entrando...';
+
+  try {
+    // Asegurar que Firebase y datos estén listos
+    if (!window._firebaseReady) {
+      await new Promise(r => document.addEventListener('firebase-ready', r, { once: true }));
+    }
+    if (!_cache.choferes.length) {
+      const choferes = await fsGetAll('choferes');
+      _cache.choferes = choferes;
+      if (!_cache.choferes.find(c => c.id === 'c0')) _cache.choferes.unshift(ADMIN_DEFAULT);
+    }
+    const chofer = DB.choferes.find(c => c.username === u && c.password === p)
+                 || (u === ADMIN_DEFAULT.username && p === ADMIN_DEFAULT.password ? ADMIN_DEFAULT : null);
+    if (!chofer) { toast('Credenciales incorrectas', 'error'); return; }
+    DB.sesion = { id: chofer.id, nombre: chofer.nombre, username: chofer.username, rol: chofer.rol };
+    await initDefaults();
+    showApp();
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = 'Iniciar Sesión';
+  }
 }
 
 function doLogout() {
@@ -1660,7 +1798,7 @@ function calcLive() {
 
 function resetForm() { initForm(); }
 
-function saveReporte() {
+async function saveReporte() {
   const sesion   = DB.sesion;
   const fecha    = document.getElementById('r-fecha').value;
   const chorerId = document.getElementById('r-chofer').value;
@@ -1719,12 +1857,15 @@ function saveReporte() {
     creadoEn: new Date().toISOString(),
   };
 
-  const reportes = DB.reportes;
-  reportes.push(reporte);
-  DB.reportes = reportes;
-  toast('Reporte guardado correctamente ✓', 'success');
-  resetForm();
-  navigate('historial');
+  try {
+    await fsSet('reportes', reporte.id, reporte);
+    toast('Reporte guardado correctamente ✓', 'success');
+    resetForm();
+    navigate('historial');
+  } catch(e) {
+    console.error(e);
+    toast('Error al guardar. Verifica tu conexión.', 'error');
+  }
 }
 
 // ══════════════════════════════════════════════
@@ -1792,12 +1933,14 @@ function confirmDelete(id) {
   openModal('modal-confirm');
   document.getElementById('confirm-msg').textContent =
     '¿Estás seguro de que deseas eliminar este reporte? Esta acción no se puede deshacer.';
-  document.getElementById('confirm-ok-btn').onclick = () => {
-    DB.reportes = DB.reportes.filter(r => r.id !== id);
-    closeModal('modal-confirm');
-    toast('Reporte eliminado', 'info');
-    renderHistorial();
-    renderDashboard();
+  document.getElementById('confirm-ok-btn').onclick = async () => {
+    try {
+      await fsDelete('reportes', id);
+      closeModal('modal-confirm');
+      toast('Reporte eliminado', 'info');
+    } catch(e) {
+      toast('Error al eliminar', 'error');
+    }
   };
 }
 
@@ -1879,7 +2022,7 @@ function renderAdmin() {
     : '<p style="color:var(--text-muted);font-size:.85rem;text-align:center;padding:.75rem">Sin unidades</p>';
 }
 
-function addChofer() {
+async function addChofer() {
   const nombre   = document.getElementById('new-chofer-nombre').value.trim();
   const username = document.getElementById('new-chofer-user').value.trim();
   const password = document.getElementById('new-chofer-pass').value;
@@ -1889,30 +2032,35 @@ function addChofer() {
   const choferes = DB.choferes;
   if (choferes.find(c => c.username === username)) { toast('Ese usuario ya existe', 'error'); return; }
 
-  choferes.push({ id: uid(), nombre, username, password, rol });
-  _store.setItem('choferes', JSON.stringify(choferes));
-
-  closeModal('modal-nuevo-chofer');
-  document.getElementById('new-chofer-nombre').value = '';
-  document.getElementById('new-chofer-user').value   = '';
-  document.getElementById('new-chofer-pass').value   = '';
-  toast('Chofer agregado', 'success');
-  renderAdmin();
+  const newId = uid();
+  const nuevoChofer = { id: newId, nombre, username, password, rol };
+  try {
+    await fsSet('choferes', newId, nuevoChofer);
+    closeModal('modal-nuevo-chofer');
+    document.getElementById('new-chofer-nombre').value = '';
+    document.getElementById('new-chofer-user').value   = '';
+    document.getElementById('new-chofer-pass').value   = '';
+    toast('Chofer agregado', 'success');
+  } catch(e) {
+    toast('Error al guardar chofer', 'error');
+  }
 }
 
 function deleteChofer(id) {
   openModal('modal-confirm');
   document.getElementById('confirm-msg').textContent = '¿Eliminar este chofer? Esta acción no se puede deshacer.';
-  document.getElementById('confirm-ok-btn').onclick = () => {
-    const lista = DB.choferes.filter(c => c.id !== id);
-    _store.setItem('choferes', JSON.stringify(lista));
-    closeModal('modal-confirm');
-    toast('Chofer eliminado', 'info');
-    renderAdmin();
+  document.getElementById('confirm-ok-btn').onclick = async () => {
+    try {
+      await fsDelete('choferes', id);
+      closeModal('modal-confirm');
+      toast('Chofer eliminado', 'info');
+    } catch(e) {
+      toast('Error al eliminar chofer', 'error');
+    }
   };
 }
 
-function addUnidad() {
+async function addUnidad() {
   const placa  = document.getElementById('new-unidad-placa').value.trim().toUpperCase();
   const modelo = document.getElementById('new-unidad-modelo').value.trim();
 
@@ -1920,34 +2068,37 @@ function addUnidad() {
   const unidades = DB.unidades;
   if (unidades.find(u => u.placa === placa)) { toast('Esa placa ya existe', 'error'); return; }
 
-  unidades.push({ id: uid(), placa, modelo });
-  _store.setItem('unidades', JSON.stringify(unidades));
-
-  document.getElementById('new-unidad-placa').value  = '';
-  document.getElementById('new-unidad-modelo').value = '';
-  closeModal('modal-nueva-unidad');
-  document.getElementById('new-unidad-placa').value  = '';
-  document.getElementById('new-unidad-modelo').value = '';
-  toast('Unidad agregada', 'success');
-  renderAdmin();
+  const newId = uid();
+  const nuevaUnidad = { id: newId, placa, modelo };
+  try {
+    await fsSet('unidades', newId, nuevaUnidad);
+    document.getElementById('new-unidad-placa').value  = '';
+    document.getElementById('new-unidad-modelo').value = '';
+    closeModal('modal-nueva-unidad');
+    toast('Unidad agregada', 'success');
+  } catch(e) {
+    toast('Error al guardar unidad', 'error');
+  }
 }
 
 function deleteUnidad(id) {
   openModal('modal-confirm');
   document.getElementById('confirm-msg').textContent = '¿Eliminar esta unidad? Esta acción no se puede deshacer.';
-  document.getElementById('confirm-ok-btn').onclick = () => {
-    const lista = DB.unidades.filter(u => u.id !== id);
-    _store.setItem('unidades', JSON.stringify(lista));
-    closeModal('modal-confirm');
-    toast('Unidad eliminada', 'info');
-    renderAdmin();
+  document.getElementById('confirm-ok-btn').onclick = async () => {
+    try {
+      await fsDelete('unidades', id);
+      closeModal('modal-confirm');
+      toast('Unidad eliminada', 'info');
+    } catch(e) {
+      toast('Error al eliminar unidad', 'error');
+    }
   };
 }
 
 // ══════════════════════════════════════════════
 //  CAMBIAR CONTRASEÑA
 // ══════════════════════════════════════════════
-function changePassword() {
+async function changePassword() {
   const sesion   = DB.sesion;
   const actual   = document.getElementById('pw-actual').value;
   const nueva    = document.getElementById('pw-nueva').value;
@@ -1963,12 +2114,15 @@ function changePassword() {
   if (nueva.length < 6)   { toast('La contraseña debe tener al menos 6 caracteres', 'warning'); return; }
 
   choferes[idx].password = nueva;
-  DB.choferes = choferes;
-
-  document.getElementById('pw-actual').value  = '';
-  document.getElementById('pw-nueva').value   = '';
-  document.getElementById('pw-confirm').value = '';
-  toast('Contraseña actualizada correctamente', 'success');
+  try {
+    await fsSet('choferes', choferes[idx].id, choferes[idx]);
+    document.getElementById('pw-actual').value  = '';
+    document.getElementById('pw-nueva').value   = '';
+    document.getElementById('pw-confirm').value = '';
+    toast('Contraseña actualizada correctamente', 'success');
+  } catch(e) {
+    toast('Error al actualizar contraseña', 'error');
+  }
 }
 
 // ══════════════════════════════════════════════
@@ -2185,8 +2339,6 @@ function shareWhatsApp(id) {
 //  INICIALIZACIÓN
 // ══════════════════════════════════════════════
 // ── INIT ──
-initDefaults();
-
 document.getElementById('login-pass').addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
 document.getElementById('login-user').addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
 
@@ -2194,12 +2346,19 @@ document.querySelectorAll('.modal-overlay').forEach(ov => {
   ov.addEventListener('click', e => { if (e.target === ov) ov.classList.remove('show'); });
 });
 
-const _sesionInicial = DB.sesion;
-if (_sesionInicial) {
-  showApp();
-} else {
-  document.getElementById('login-screen').style.display = 'flex';
-}
+// Mostrar login mientras espera Firebase
+document.getElementById('login-screen').style.display = 'flex';
+
+// Si hay sesión guardada, restaurar automáticamente al cargar Firebase
+document.addEventListener('firebase-ready', async () => {
+  const sesionGuardada = DB.sesion;
+  if (sesionGuardada) {
+    document.getElementById('login-btn').disabled = true;
+    document.getElementById('login-btn').innerHTML = '<div class="spinner"></div>';
+    await initDefaults();
+    showApp();
+  }
+});
 
 </script>
 </body>
