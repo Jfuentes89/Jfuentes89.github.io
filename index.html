@@ -20,11 +20,6 @@
       onSnapshot, query, orderBy
     } from "https://www.gstatic.com/firebasejs/11.9.0/firebase-firestore.js";
 
-    // ════════════════════════════════════════════════════
-    //  🔧 PEGA AQUÍ TU CONFIGURACIÓN DE FIREBASE
-    //  Instrucciones: console.firebase.google.com
-    //  → Crear proyecto → Web app → Copiar firebaseConfig
-    // ════════════════════════════════════════════════════
     const firebaseConfig = {
       apiKey:            "AIzaSyANMpH5oor6DOuy5IaiU5LxLxxX5Vb5bik",
       authDomain:        "basetransportesmelgar.firebaseapp.com",
@@ -37,13 +32,10 @@
     const app = initializeApp(firebaseConfig);
     const db  = getFirestore(app);
 
-    // Exponer helpers al scope global para que el resto del JS los use
-    window._firebase = {
-      db,
-      collection, doc, getDocs, addDoc, setDoc, deleteDoc, onSnapshot, query, orderBy
-    };
+    window._firebase = { db, collection, doc, getDocs, addDoc, setDoc, deleteDoc, onSnapshot, query, orderBy };
     window._firebaseReady = true;
-    document.dispatchEvent(new Event('firebase-ready'));
+    // Resolver la promesa que el JS principal está esperando
+    if (window._fbResolve) window._fbResolve();
   </script>
 
 
@@ -1343,32 +1335,32 @@ const DB = {
   },
 };
 
+// ── Esperar a que Firebase esté listo ──
+const _fbReady = new Promise(resolve => {
+  if (window._firebaseReady) { resolve(); }
+  else { window._fbResolve = resolve; }
+});
+
 // ── Helpers Firestore ──
 function _fs()  { return window._firebase; }
 function _fdb() { return window._firebase.db; }
 
 async function fsGetAll(col) {
+  await _fbReady;
   const { collection, getDocs } = _fs();
   const snap = await getDocs(collection(_fdb(), col));
   return snap.docs.map(d => ({ id: d.id, ...d.data() }));
 }
 
 async function fsSet(col, id, data) {
+  await _fbReady;
   const { doc, setDoc } = _fs();
-  const d = { ...data };
-  delete d.id;
+  const d = { ...data }; delete d.id;
   await setDoc(doc(_fdb(), col, id), d);
 }
 
-async function fsAdd(col, data) {
-  const { collection, addDoc } = _fs();
-  const d = { ...data };
-  delete d.id;
-  const ref = await addDoc(collection(_fdb(), col), d);
-  return ref.id;
-}
-
 async function fsDelete(col, id) {
+  await _fbReady;
   const { doc, deleteDoc } = _fs();
   await deleteDoc(doc(_fdb(), col, id));
 }
@@ -1380,45 +1372,31 @@ function subscribeAll() {
 
   onSnapshot(collection(fdb, 'choferes'), snap => {
     _cache.choferes = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-    // Garantizar admin hardcodeado
-    if (!_cache.choferes.find(c => c.id === 'c0')) {
-      _cache.choferes.unshift(ADMIN_DEFAULT);
-    }
-    // Refrescar UI si está activa
+    if (!_cache.choferes.find(c => c.id === 'c0')) _cache.choferes.unshift(ADMIN_DEFAULT);
     const pg = document.querySelector('.page.active');
-    if (pg) {
-      if (pg.id === 'page-admin') renderAdmin();
-      if (pg.id === 'page-nuevo-reporte') initForm();
-    }
+    if (pg && pg.id === 'page-admin') renderAdmin();
+    if (pg && pg.id === 'page-nuevo-reporte') initForm();
   });
 
   onSnapshot(collection(fdb, 'unidades'), snap => {
     _cache.unidades = snap.docs.map(d => ({ id: d.id, ...d.data() }));
     const pg = document.querySelector('.page.active');
-    if (pg) {
-      if (pg.id === 'page-admin') renderAdmin();
-      if (pg.id === 'page-nuevo-reporte') initForm();
-    }
+    if (pg && pg.id === 'page-admin') renderAdmin();
+    if (pg && pg.id === 'page-nuevo-reporte') initForm();
   });
 
   onSnapshot(query(collection(fdb, 'reportes'), orderBy('fecha', 'desc')), snap => {
     _cache.reportes = snap.docs.map(d => ({ id: d.id, ...d.data() }));
     const pg = document.querySelector('.page.active');
-    if (pg) {
-      if (pg.id === 'page-dashboard') renderDashboard();
-      if (pg.id === 'page-historial') renderHistorial();
-    }
+    if (pg && pg.id === 'page-dashboard') renderDashboard();
+    if (pg && pg.id === 'page-historial') renderHistorial();
   });
 }
 
 // ── Carga inicial + suscripciones ──
 async function initDefaults() {
-  if (!window._firebaseReady) {
-    // Firebase aún no cargó, esperar
-    await new Promise(r => document.addEventListener('firebase-ready', r, { once: true }));
-  }
+  await _fbReady;
 
-  // Cargar datos iniciales en caché
   const [choferes, unidades, reportes] = await Promise.all([
     fsGetAll('choferes'),
     fsGetAll('unidades'),
@@ -1429,13 +1407,11 @@ async function initDefaults() {
   _cache.unidades = unidades;
   _cache.reportes = reportes;
 
-  // Crear admin si no existe en Firestore
   if (!_cache.choferes.find(c => c.id === 'c0')) {
     await fsSet('choferes', 'c0', ADMIN_DEFAULT);
     _cache.choferes.unshift(ADMIN_DEFAULT);
   }
 
-  // Activar escucha en tiempo real
   subscribeAll();
 }
 
@@ -1479,24 +1455,33 @@ async function doLogin() {
 
   const btn = document.getElementById('login-btn');
   btn.disabled = true;
-  btn.innerHTML = '<div class="spinner"></div> Entrando...';
+  btn.innerHTML = '<div class="spinner"></div> Conectando...';
 
   try {
-    // Asegurar que Firebase y datos estén listos
-    if (!window._firebaseReady) {
-      await new Promise(r => document.addEventListener('firebase-ready', r, { once: true }));
-    }
+    // 1. Esperar Firebase
+    await _fbReady;
+
+    // 2. Cargar choferes si no están en caché
     if (!_cache.choferes.length) {
-      const choferes = await fsGetAll('choferes');
-      _cache.choferes = choferes;
+      const lista = await fsGetAll('choferes');
+      _cache.choferes = lista;
       if (!_cache.choferes.find(c => c.id === 'c0')) _cache.choferes.unshift(ADMIN_DEFAULT);
     }
-    const chofer = DB.choferes.find(c => c.username === u && c.password === p)
+
+    // 3. Verificar credenciales (primero BD, luego fallback admin hardcodeado)
+    const chofer = _cache.choferes.find(c => c.username === u && c.password === p)
                  || (u === ADMIN_DEFAULT.username && p === ADMIN_DEFAULT.password ? ADMIN_DEFAULT : null);
+
     if (!chofer) { toast('Credenciales incorrectas', 'error'); return; }
+
+    // 4. Guardar sesión y cargar todo
     DB.sesion = { id: chofer.id, nombre: chofer.nombre, username: chofer.username, rol: chofer.rol };
     await initDefaults();
     showApp();
+
+  } catch(err) {
+    console.error('Login error:', err);
+    toast('Error de conexión. Intenta de nuevo.', 'error');
   } finally {
     btn.disabled = false;
     btn.innerHTML = 'Iniciar Sesión';
@@ -2346,17 +2331,22 @@ document.querySelectorAll('.modal-overlay').forEach(ov => {
   ov.addEventListener('click', e => { if (e.target === ov) ov.classList.remove('show'); });
 });
 
-// Mostrar login mientras espera Firebase
+// Mostrar login
 document.getElementById('login-screen').style.display = 'flex';
 
-// Si hay sesión guardada, restaurar automáticamente al cargar Firebase
-document.addEventListener('firebase-ready', async () => {
+// Si hay sesión guardada, restaurar automáticamente cuando Firebase esté listo
+_fbReady.then(async () => {
   const sesionGuardada = DB.sesion;
   if (sesionGuardada) {
     document.getElementById('login-btn').disabled = true;
     document.getElementById('login-btn').innerHTML = '<div class="spinner"></div>';
-    await initDefaults();
-    showApp();
+    try {
+      await initDefaults();
+      showApp();
+    } catch(e) {
+      document.getElementById('login-btn').disabled = false;
+      document.getElementById('login-btn').innerHTML = 'Iniciar Sesión';
+    }
   }
 });
 
