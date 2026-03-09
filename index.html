@@ -1835,10 +1835,14 @@ async function saveReporte() {
     if (concepto && monto > 0) ingresosExtra.push({ concepto, monto });
   });
 
-  // Recopilar gastos
+  // Recopilar gastos (campos fijos + dinámicos)
   const gastos = [];
+  const _diesel     = parseFloat(document.getElementById('g-diesel')?.value) || 0;
+  const _pagoChofer = parseFloat(document.getElementById('g-pago-chofer')?.value) || 0;
+  if (_diesel > 0)     gastos.push({ concepto: 'Diesel',          monto: _diesel });
+  if (_pagoChofer > 0) gastos.push({ concepto: 'Pago de chófer',  monto: _pagoChofer });
   document.querySelectorAll('#gastos-list .dynamic-item').forEach(row => {
-    const ins     = row.querySelectorAll('input');
+    const ins      = row.querySelectorAll('input');
     const concepto = ins[0]?.value?.trim();
     const monto    = parseFloat(ins[1]?.value) || 0;
     if (concepto && monto > 0) gastos.push({ concepto, monto });
