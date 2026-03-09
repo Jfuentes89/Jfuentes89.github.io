@@ -1241,6 +1241,44 @@ tbody td { padding: .85rem 1rem; color: var(--text-primary); white-space: nowrap
 <!-- ══════════════════════════════════════════
      MODAL — Confirmación de eliminación
 ══════════════════════════════════════════ -->
+<!-- ══════════════════════════════════════════
+     MODAL — Editar Chofer
+══════════════════════════════════════════ -->
+<div class="modal-overlay" id="modal-edit-chofer">
+  <div class="modal" style="max-width:420px">
+    <div class="modal-header">
+      <h3>Editar Usuario</h3>
+      <button class="btn-icon" onclick="closeModal('modal-edit-chofer')">
+        <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+        </svg>
+      </button>
+    </div>
+    <div class="modal-body" style="display:flex;flex-direction:column;gap:.9rem">
+      <div class="form-group">
+        <label>Nombre</label>
+        <input type="text" id="edit-chofer-nombre" placeholder="Nombre completo">
+      </div>
+      <div class="form-group">
+        <label>Nueva contraseña <span style="color:var(--text-muted);font-weight:400">(dejar vacío para no cambiar)</span></label>
+        <input type="password" id="edit-chofer-pass" placeholder="••••••••">
+      </div>
+      <div class="form-group">
+        <label>Rol</label>
+        <select id="edit-chofer-rol">
+          <option value="chofer">Chofer</option>
+          <option value="admin">Administrador</option>
+        </select>
+      </div>
+      <input type="hidden" id="edit-chofer-id">
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('modal-edit-chofer')">Cancelar</button>
+      <button class="btn btn-primary" onclick="saveEditChofer()">Guardar Cambios</button>
+    </div>
+  </div>
+</div>
+
 <div class="modal-overlay" id="modal-confirm">
   <div class="modal" style="max-width:380px">
     <div class="modal-header">
@@ -1957,13 +1995,18 @@ function renderAdmin() {
   document.getElementById('choferes-list').innerHTML = choferes.length
     ? choferes.map(c => `
       <div class="admin-list-item">
-        <div>
+        <div style="flex:1;min-width:0">
           <span>${c.nombre}</span>
-          <div style="font-size:.72rem;color:var(--text-muted)">${c.username} · ${c.rol}</div>
+          <div style="font-size:.72rem;color:var(--text-muted)">${c.username} · <span style="color:var(--accent);font-weight:600">${c.rol}</span></div>
         </div>
-        ${c.id !== 'c0'
-          ? `<button class="btn btn-danger btn-sm" onclick="deleteChofer('${c.id}')">✕</button>`
-          : '<span class="badge badge-warning">Admin</span>'}
+        <div style="display:flex;gap:.4rem;align-items:center">
+          ${c.id !== 'c0'
+            ? `<button class="btn btn-secondary btn-sm" onclick="openEditChofer('${c.id}')" title="Editar rol">
+                <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+              </button>
+              <button class="btn btn-danger btn-sm" onclick="deleteChofer('${c.id}')">✕</button>`
+            : '<span class="badge badge-warning">Admin</span>'}
+        </div>
       </div>`).join('')
     : '<p style="color:var(--text-muted);font-size:.85rem;text-align:center;padding:.75rem">Sin choferes</p>';
 
@@ -2000,6 +2043,43 @@ async function addChofer() {
     toast('Chofer agregado', 'success');
   } catch(e) {
     toast('Error al guardar chofer', 'error');
+  }
+}
+
+function openEditChofer(id) {
+  const c = DB.choferes.find(x => x.id === id);
+  if (!c) { toast('Usuario no encontrado', 'error'); return; }
+  document.getElementById('edit-chofer-id').value     = c.id;
+  document.getElementById('edit-chofer-nombre').value = c.nombre;
+  document.getElementById('edit-chofer-pass').value   = '';
+  document.getElementById('edit-chofer-rol').value    = c.rol;
+  openModal('modal-edit-chofer');
+}
+
+async function saveEditChofer() {
+  const id     = document.getElementById('edit-chofer-id').value;
+  const nombre = document.getElementById('edit-chofer-nombre').value.trim();
+  const pass   = document.getElementById('edit-chofer-pass').value;
+  const rol    = document.getElementById('edit-chofer-rol').value;
+
+  if (!nombre) { toast('El nombre no puede estar vacío', 'warning'); return; }
+
+  const choferes = [...DB.choferes];
+  const idx = choferes.findIndex(c => c.id === id);
+  if (idx === -1) { toast('Usuario no encontrado', 'error'); return; }
+
+  choferes[idx] = { ...choferes[idx], nombre, rol };
+  if (pass) choferes[idx].password = pass;
+
+  try {
+    await fsSet('choferes', id, choferes[idx]);
+    _cache.choferes = choferes;
+    closeModal('modal-edit-chofer');
+    toast(`${nombre} actualizado correctamente`, 'success');
+    renderAdmin();
+  } catch(e) {
+    console.error(e);
+    toast('Error al guardar cambios', 'error');
   }
 }
 
