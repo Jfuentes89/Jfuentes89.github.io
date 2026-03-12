@@ -559,6 +559,8 @@ tbody td { padding: .85rem 1rem; color: var(--text-primary); white-space: nowrap
 
 /* ── Agenda ── */
 .agenda-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); padding: 1.25rem; display: flex; flex-direction: column; gap: .85rem; transition: box-shadow .2s; }
+#agenda-sec-hoy .agenda-card { border-left: 3px solid #762FA4; background: linear-gradient(135deg, rgba(118,47,164,.06), var(--bg-card)); }
+#agenda-sec-manana .agenda-card { border-left: 3px solid #57D5D5; background: linear-gradient(135deg, rgba(87,213,213,.05), var(--bg-card)); }
 .agenda-card:hover { box-shadow: var(--shadow); }
 .agenda-card-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; flex-wrap: wrap; }
 .agenda-card-title { font-family: var(--font-title); font-size: 1.3rem; letter-spacing: 1px; color: var(--text-primary); }
@@ -1108,7 +1110,11 @@ tbody td { padding: .85rem 1rem; color: var(--text-primary); white-space: nowrap
             Agendar Viaje
           </button>
         </div>
-        <div id="agenda-list" style="display:flex;flex-direction:column;gap:1rem;margin-top:1rem"></div>
+        <div style="display:flex;flex-direction:column;gap:1.75rem;margin-top:1rem">
+          <div id="agenda-sec-hoy"></div>
+          <div id="agenda-sec-manana"></div>
+          <div id="agenda-sec-resto"></div>
+        </div>
       </div>
 
       <div class="page" id="page-admin">
@@ -1338,10 +1344,50 @@ tbody td { padding: .85rem 1rem; color: var(--text-primary); white-space: nowrap
         <label>Unidad</label>
         <select id="av-unidad"></select>
       </div>
+      <div class="form-group">
+        <label>Pago de Chofer</label>
+        <input type="number" id="av-pago-chofer" placeholder="$0.00" min="0" step="0.01">
+      </div>
     </div>
     <div class="modal-footer">
       <button class="btn btn-secondary" onclick="closeModal('modal-nuevo-viaje-agenda')">Cancelar</button>
       <button class="btn btn-primary"   onclick="saveViajeAgenda()">Agendar Viaje</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════
+     MODAL — Editar Reporte (Vista Chofer)
+══════════════════════════════════════════ -->
+<div class="modal-overlay" id="modal-edit-reporte-chofer">
+  <div class="modal" style="max-width:440px">
+    <div class="modal-header">
+      <h3>Editar Reporte</h3>
+      <button class="btn-icon" onclick="closeModal('modal-edit-reporte-chofer')">
+        <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+        </svg>
+      </button>
+    </div>
+    <div class="modal-body" style="display:flex;flex-direction:column;gap:.85rem">
+      <div class="form-group">
+        <label>Entregado a</label>
+        <input type="text" id="erc-entregado" placeholder="Ej. Juan Pérez">
+      </div>
+      <div class="form-group">
+        <label>Diesel</label>
+        <input type="number" id="erc-diesel" placeholder="$0.00" min="0" step="0.01">
+      </div>
+      <div class="form-group">
+        <label>Otros gastos</label>
+        <div id="erc-gastos-list" style="display:flex;flex-direction:column;gap:.5rem"></div>
+        <button class="btn btn-secondary btn-sm" style="margin-top:.5rem" onclick="addGastoChoferEdit()">+ Agregar gasto</button>
+      </div>
+      <input type="hidden" id="erc-id">
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('modal-edit-reporte-chofer')">Cancelar</button>
+      <button class="btn btn-primary"   onclick="saveEditReporteChofer()">Guardar Cambios</button>
     </div>
   </div>
 </div>
@@ -1389,6 +1435,10 @@ tbody td { padding: .85rem 1rem; color: var(--text-primary); white-space: nowrap
       <div class="form-group">
         <label>Unidad</label>
         <select id="ea-unidad"></select>
+      </div>
+      <div class="form-group">
+        <label>Pago de Chofer</label>
+        <input type="number" id="ea-pago-chofer" placeholder="$0.00" min="0" step="0.01">
       </div>
       <input type="hidden" id="ea-id">
     </div>
@@ -2137,21 +2187,43 @@ function calcLive() {
 }
 
 function resetForm() {
-  // Si el chofer cancela con Limpiar, desvincula el viaje y desbloquea el form
+  const viajeId = window._viajeAgendaIdPendiente;
   window._viajeAgendaIdPendiente = null;
-  ['r-fecha','r-cliente','r-destino','r-flete'].forEach(fid => {
-    const el = document.getElementById(fid); if (el) el.readOnly = false;
-  });
-  const uSel = document.getElementById('r-unidad'); if (uSel) uSel.disabled = false;
-  const cSel = document.getElementById('r-chofer'); if (cSel) cSel.disabled = false;
-  // Restaurar botón guardar
-  const btn = document.querySelector('button[onclick="saveReporte()"]');
-  if (btn) {
-    btn.innerHTML = '<svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg> Guardar Reporte';
-    btn.style.background = '';
-    btn.style.border = '';
+
+  if (viajeId) {
+    // Venía de finalizar un viaje: solo limpiar campos editables por el chofer
+    const diesel = document.getElementById('g-diesel');       if (diesel) diesel.value = '';
+    const entregado = document.getElementById('r-entregado'); if (entregado) entregado.value = '';
+    document.getElementById('gastos-list').innerHTML = '';
+    // Desbloquear campos que se bloquearon
+    ['r-fecha','r-cliente','r-destino','r-flete','g-pago-chofer'].forEach(fid => {
+      const el = document.getElementById(fid); if (el) el.readOnly = false;
+    });
+    const uSel = document.getElementById('r-unidad'); if (uSel) uSel.disabled = false;
+    const cSel = document.getElementById('r-chofer'); if (cSel) cSel.disabled = false;
+    // Restaurar botón guardar
+    const btn = document.querySelector('button[onclick="saveReporte()"]');
+    if (btn) {
+      btn.innerHTML = '<svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg> Guardar Reporte';
+      btn.style.background = '';
+      btn.style.border = '';
+    }
+    calcLive();
+  } else {
+    // Limpiar completo (uso normal por admin o chofer sin viaje asignado)
+    ['r-fecha','r-cliente','r-destino','r-flete','g-pago-chofer'].forEach(fid => {
+      const el = document.getElementById(fid); if (el) el.readOnly = false;
+    });
+    const uSel = document.getElementById('r-unidad'); if (uSel) uSel.disabled = false;
+    const cSel = document.getElementById('r-chofer'); if (cSel) cSel.disabled = false;
+    const btn = document.querySelector('button[onclick="saveReporte()"]');
+    if (btn) {
+      btn.innerHTML = '<svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg> Guardar Reporte';
+      btn.style.background = '';
+      btn.style.border = '';
+    }
+    initForm();
   }
-  initForm();
 }
 
 async function saveReporte() {
@@ -2289,7 +2361,7 @@ function renderHistorial() {
         <span class="activity-amount ${pos ? 'positive' : 'negative'}">${fmt(r.utilidad)}</span>
         <div style="display:flex;gap:.35rem">
           <button class="btn btn-secondary btn-sm" onclick="showDetalle('${r.id}')">Ver</button>
-          <button class="btn btn-danger btn-sm"    onclick="confirmDelete('${r.id}')">✕</button>
+          ${sesion.rol !== 'chofer' ? `<button class="btn btn-danger btn-sm" onclick="confirmDelete('${r.id}')">✕</button>` : ''}
         </div>
       </div>
     </div>`;
@@ -2362,7 +2434,11 @@ function showDetalle(id) {
     </div>`;
 
   document.getElementById('modal-share-btn').onclick = () => shareWhatsApp(id);
-  document.getElementById('modal-edit-btn').onclick  = () => openEditReporte(id);
+  if (DB.sesion.rol === 'chofer') {
+    document.getElementById('modal-edit-btn').onclick = () => openEditReporteChofer(id);
+  } else {
+    document.getElementById('modal-edit-btn').onclick = () => openEditReporte(id);
+  }
   openModal('modal-detalle');
 }
 
@@ -2373,60 +2449,88 @@ function showDetalle(id) {
 //  AGENDA DE VIAJES
 // ══════════════════════════════════════════════
 
-function renderAgenda() {
-  const lista = DB.agenda;
-  const el    = document.getElementById('agenda-list');
+function _buildAgendaCard(v) {
+  const estadoBadge = {
+    'sin-chofer': 'Sin Asignar', pendiente: 'Pendiente',
+    aceptado: 'Aceptado', 'en-ruta': 'En Ruta', completado: 'Completado'
+  };
+  const chofer = DB.choferes.find(c => c.id === v.chorerId);
+  const unidad = DB.unidades.find(u => u.id === v.unidadId);
+  const estado = !v.chorerId ? 'sin-chofer' : (v.estado || 'pendiente');
+  const btnAsignar = !v.chorerId
+    ? `<button class="btn btn-primary btn-sm" onclick="openAsignarChofer('${v.id}')">
+         <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+         Asignar Chofer
+       </button>`
+    : '';
+  return `
+  <div class="agenda-card">
+    <div class="agenda-card-header">
+      <div class="agenda-card-title">${v.cliente} → ${v.destino}</div>
+      <span class="agenda-badge ${estado}">${estadoBadge[estado] || estado}</span>
+    </div>
+    <div class="agenda-card-info">
+      <div class="agenda-info-item"><label>Fecha</label><span>${fmtDate(v.fecha)}</span></div>
+      <div class="agenda-info-item"><label>Hora salida</label><span>${v.hora || '—'}</span></div>
+      <div class="agenda-info-item"><label>Chofer</label><span>${chofer ? chofer.nombre : '⚠ Sin asignar'}</span></div>
+      <div class="agenda-info-item"><label>Unidad</label><span>${unidad ? unidad.modelo + ' (' + unidad.placa + ')' : '—'}</span></div>
+      <div class="agenda-info-item"><label>Precio</label><span style="color:var(--success)">${fmt(v.flete)}</span></div>
+    </div>
+    <div class="agenda-card-actions">
+      ${btnAsignar}
+      <button class="btn btn-secondary btn-sm" onclick="openEditViajeAgenda('${v.id}')">
+        <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+        Editar
+      </button>
+      <button class="btn btn-danger btn-sm" onclick="deleteViajeAgenda('${v.id}')">Eliminar</button>
+    </div>
+  </div>`;
+}
+
+function _renderAgendaSection(containerId, viajes, titulo, accentStyle) {
+  const el = document.getElementById(containerId);
   if (!el) return;
+  if (!viajes.length) { el.innerHTML = ''; return; }
+  el.innerHTML = `
+    <div style="margin-bottom:.75rem">
+      <span style="font-family:var(--font-title);font-size:1.1rem;letter-spacing:1.5px;${accentStyle}">${titulo}</span>
+      <span style="font-size:.78rem;color:var(--text-muted);margin-left:.6rem">${viajes.length} viaje${viajes.length !== 1 ? 's' : ''}</span>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:1rem">
+      ${viajes.map(_buildAgendaCard).join('')}
+    </div>`;
+}
+
+function renderAgenda() {
+  if (!document.getElementById('agenda-sec-hoy')) return;
+
+  const lista = DB.agenda;
+  const hoy     = new Date().toISOString().slice(0, 10);
+  const manana  = new Date(Date.now() + 86400000).toISOString().slice(0, 10);
+
+  const deHoy    = lista.filter(v => v.fecha === hoy).sort((a,b) => (a.hora||'').localeCompare(b.hora||''));
+  const deManana = lista.filter(v => v.fecha === manana).sort((a,b) => (a.hora||'').localeCompare(b.hora||''));
+  const resto    = lista.filter(v => v.fecha !== hoy && v.fecha !== manana).sort((a,b) => a.fecha.localeCompare(b.fecha));
 
   if (!lista.length) {
-    el.innerHTML = '<div class="empty-state"><p>Sin viajes agendados.</p></div>';
+    document.getElementById('agenda-sec-hoy').innerHTML = '<div class="empty-state"><p>Sin viajes agendados.</p></div>';
+    document.getElementById('agenda-sec-manana').innerHTML = '';
+    document.getElementById('agenda-sec-resto').innerHTML = '';
     return;
   }
 
-  const estadoBadge = {
-    'sin-chofer': 'Sin Asignar',
-    pendiente:    'Pendiente',
-    aceptado:     'Aceptado',
-    'en-ruta':    'En Ruta',
-    completado:   'Completado'
-  };
+  _renderAgendaSection('agenda-sec-hoy',    deHoy,    'VIAJES PARA HOY',     'color:#762FA4');
+  _renderAgendaSection('agenda-sec-manana', deManana, 'VIAJES PARA MAÑANA',  'color:#57D5D5');
+  _renderAgendaSection('agenda-sec-resto',  resto,    'PRÓXIMOS VIAJES',     'color:var(--text-muted)');
 
-  el.innerHTML = lista.map(v => {
-    const chofer = DB.choferes.find(c => c.id === v.chorerId);
-    const unidad = DB.unidades.find(u => u.id === v.unidadId);
-    // Si no tiene chofer asignado, mostrar estado especial
-    const estado = !v.chorerId ? 'sin-chofer' : (v.estado || 'pendiente');
-
-    const btnAsignar = !v.chorerId
-      ? `<button class="btn btn-primary btn-sm" onclick="openAsignarChofer('${v.id}')">
-           <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
-           Asignar Chofer
-         </button>`
-      : '';
-
-    return `
-    <div class="agenda-card">
-      <div class="agenda-card-header">
-        <div class="agenda-card-title">${v.cliente} → ${v.destino}</div>
-        <span class="agenda-badge ${estado}">${estadoBadge[estado] || estado}</span>
-      </div>
-      <div class="agenda-card-info">
-        <div class="agenda-info-item"><label>Fecha</label><span>${fmtDate(v.fecha)}</span></div>
-        <div class="agenda-info-item"><label>Hora salida</label><span>${v.hora || '—'}</span></div>
-        <div class="agenda-info-item"><label>Chofer</label><span>${chofer ? chofer.nombre : '⚠ Sin asignar'}</span></div>
-        <div class="agenda-info-item"><label>Unidad</label><span>${unidad ? unidad.modelo + ' (' + unidad.placa + ')' : '—'}</span></div>
-        <div class="agenda-info-item"><label>Precio</label><span style="color:var(--success)">${fmt(v.flete)}</span></div>
-      </div>
-      <div class="agenda-card-actions">
-        ${btnAsignar}
-        <button class="btn btn-secondary btn-sm" onclick="openEditViajeAgenda('${v.id}')">
-          <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-          Editar
-        </button>
-        <button class="btn btn-danger btn-sm" onclick="deleteViajeAgenda('${v.id}')">Eliminar</button>
-      </div>
-    </div>`;
-  }).join('');
+  // Si no hay nada en hoy ni mañana pero sí en resto, mostrar empty solo en hoy
+  if (!deHoy.length && !deManana.length && !resto.length) {
+    document.getElementById('agenda-sec-hoy').innerHTML = '<div class="empty-state"><p>Sin viajes agendados.</p></div>';
+  } else if (!deHoy.length) {
+    document.getElementById('agenda-sec-hoy').innerHTML =
+      `<div style="margin-bottom:.75rem"><span style="font-family:var(--font-title);font-size:1.1rem;letter-spacing:1.5px;color:#762FA4">VIAJES PARA HOY</span></div>
+       <div class="empty-state" style="padding:1rem 0"><p>Sin viajes programados para hoy.</p></div>`;
+  }
 }
 
 function openModalAgenda() {
@@ -2456,13 +2560,14 @@ async function saveViajeAgenda() {
     toast('Completa fecha, cliente, destino y precio', 'warning'); return;
   }
 
+  const pagoChofer = parseFloat(document.getElementById('av-pago-chofer').value) || 0;
   const estado = chorerId ? 'pendiente' : 'sin-chofer';
-  const viaje = { id: uid(), fecha, hora, cliente, destino, flete, chorerId, unidadId, estado, creadoEn: new Date().toISOString() };
+  const viaje = { id: uid(), fecha, hora, cliente, destino, flete, pagoChofer, chorerId, unidadId, estado, creadoEn: new Date().toISOString() };
 
   try {
     await fsSet('agenda', viaje.id, viaje);
     // Limpiar
-    ['av-fecha','av-hora','av-cliente','av-destino','av-flete'].forEach(id => document.getElementById(id).value = '');
+    ['av-fecha','av-hora','av-cliente','av-destino','av-flete','av-pago-chofer'].forEach(id => document.getElementById(id).value = '');
     document.getElementById('av-chofer').value = '';
     document.getElementById('av-unidad').value = '';
     closeModal('modal-nuevo-viaje-agenda');
@@ -2487,7 +2592,8 @@ function openEditViajeAgenda(id) {
   document.getElementById('ea-hora').value    = v.hora   || '';
   document.getElementById('ea-cliente').value = v.cliente || '';
   document.getElementById('ea-destino').value = v.destino || '';
-  document.getElementById('ea-flete').value   = v.flete  || '';
+  document.getElementById('ea-flete').value        = v.flete      || '';
+  document.getElementById('ea-pago-chofer').value  = v.pagoChofer || '';
   openModal('modal-edit-viaje-agenda');
 }
 
@@ -2497,9 +2603,10 @@ async function saveEditViajeAgenda() {
   const hora     = document.getElementById('ea-hora').value;
   const cliente  = document.getElementById('ea-cliente').value.trim();
   const destino  = document.getElementById('ea-destino').value.trim();
-  const flete    = parseFloat(document.getElementById('ea-flete').value) || 0;
-  const chorerId = document.getElementById('ea-chofer').value;
-  const unidadId = document.getElementById('ea-unidad').value;
+  const flete      = parseFloat(document.getElementById('ea-flete').value) || 0;
+  const pagoChofer = parseFloat(document.getElementById('ea-pago-chofer').value) || 0;
+  const chorerId   = document.getElementById('ea-chofer').value;
+  const unidadId   = document.getElementById('ea-unidad').value;
 
   if (!fecha || !cliente || !destino || flete <= 0) {
     toast('Completa fecha, cliente, destino y precio', 'warning'); return;
@@ -2509,7 +2616,7 @@ async function saveEditViajeAgenda() {
   const idx = agenda.findIndex(v => v.id === id);
   if (idx === -1) { toast('Viaje no encontrado', 'error'); return; }
 
-  agenda[idx] = { ...agenda[idx], fecha, hora, cliente, destino, flete, chorerId, unidadId };
+  agenda[idx] = { ...agenda[idx], fecha, hora, cliente, destino, flete, pagoChofer, chorerId, unidadId };
 
   try {
     await fsSet('agenda', id, agenda[idx]);
@@ -2593,14 +2700,16 @@ async function choferFinalizarViaje(id) {
     if (g('r-cliente')) g('r-cliente').value = viaje.cliente || '';
     if (g('r-destino')) g('r-destino').value = viaje.destino || '';
     if (g('r-flete'))   { g('r-flete').value = viaje.flete || ''; calcLive(); }
+    if (viaje.pagoChofer && g('g-pago-chofer')) { g('g-pago-chofer').value = viaje.pagoChofer; calcLive(); }
     if (viaje.chorerId && g('r-chofer')) g('r-chofer').value = viaje.chorerId;
     if (viaje.unidadId && g('r-unidad')) g('r-unidad').value = viaje.unidadId;
     // Bloquear campos para que el chofer no los modifique
     ['r-fecha','r-cliente','r-destino','r-flete'].forEach(fid => {
       const el = g(fid); if (el) el.readOnly = true;
     });
-    if (g('r-unidad')) g('r-unidad').disabled = true;
-    if (g('r-chofer')) g('r-chofer').disabled = true;
+    if (g('r-unidad'))     g('r-unidad').disabled = true;
+    if (g('r-chofer'))     g('r-chofer').disabled = true;
+    if (g('g-pago-chofer')) g('g-pago-chofer').readOnly = true;
     // Cambiar botón a "Finalizar Viaje"
     const btn = document.querySelector('button[onclick="saveReporte()"]');
     if (btn) {
@@ -2850,6 +2959,78 @@ async function saveEditUnidad() {
     closeModal('modal-edit-unidad');
     toast('Unidad actualizada correctamente', 'success');
     renderAdmin();
+  } catch(e) { console.error(e); toast('Error al guardar', 'error'); }
+}
+
+function openEditReporteChofer(id) {
+  const r = DB.reportes.find(x => x.id === id);
+  if (!r) return;
+  document.getElementById('erc-id').value       = r.id;
+  document.getElementById('erc-entregado').value = r.entregadoA || '';
+  const diesel = (r.gastos || []).find(g => g.concepto === 'Diesel');
+  document.getElementById('erc-diesel').value = diesel ? diesel.monto : '';
+  // Cargar otros gastos (no Diesel, no Pago de chófer)
+  const otros = (r.gastos || []).filter(g => g.concepto !== 'Diesel' && g.concepto !== 'Pago de chófer');
+  const lista = document.getElementById('erc-gastos-list');
+  lista.innerHTML = '';
+  otros.forEach(g => {
+    const row = document.createElement('div');
+    row.className = 'dynamic-item with-label';
+    row.innerHTML = `<input type="text" value="${g.concepto}" placeholder="Concepto" style="${inputStyle()}">
+      <input type="number" value="${g.monto}" placeholder="Monto" min="0" step="0.01" style="${inputStyle()}">
+      <button class="remove-item-btn" onclick="this.parentElement.remove()">✕</button>`;
+    lista.appendChild(row);
+  });
+  closeModal('modal-detalle');
+  openModal('modal-edit-reporte-chofer');
+}
+
+function addGastoChoferEdit() {
+  const row = document.createElement('div');
+  row.className = 'dynamic-item with-label';
+  row.innerHTML = `<input type="text" placeholder="Concepto" style="${inputStyle()}">
+    <input type="number" placeholder="Monto" min="0" step="0.01" style="${inputStyle()}">
+    <button class="remove-item-btn" onclick="this.parentElement.remove()">✕</button>`;
+  document.getElementById('erc-gastos-list').appendChild(row);
+}
+
+async function saveEditReporteChofer() {
+  const id         = document.getElementById('erc-id').value;
+  const entregadoA = document.getElementById('erc-entregado').value.trim();
+  const diesel     = parseFloat(document.getElementById('erc-diesel').value) || 0;
+
+  const reportes = [...DB.reportes];
+  const idx = reportes.findIndex(r => r.id === id);
+  if (idx === -1) { toast('Reporte no encontrado', 'error'); return; }
+
+  const r = reportes[idx];
+  // Preservar Pago de chófer original
+  const pagoChofer = (r.gastos || []).find(g => g.concepto === 'Pago de chófer');
+  // Recopilar otros gastos del modal
+  const otrosGastos = [];
+  document.querySelectorAll('#erc-gastos-list .dynamic-item').forEach(row => {
+    const ins = row.querySelectorAll('input');
+    const concepto = ins[0]?.value?.trim();
+    const monto    = parseFloat(ins[1]?.value) || 0;
+    if (concepto && monto > 0) otrosGastos.push({ concepto, monto });
+  });
+  const gastos = [];
+  if (diesel > 0)    gastos.push({ concepto: 'Diesel',         monto: diesel });
+  if (pagoChofer)    gastos.push(pagoChofer);
+  gastos.push(...otrosGastos);
+
+  const subtotalGastos = gastos.reduce((s, g) => s + g.monto, 0);
+  const utilidad       = r.subtotalIngresos - subtotalGastos;
+
+  reportes[idx] = { ...r, entregadoA, gastos, subtotalGastos, utilidad };
+
+  try {
+    await fsSet('reportes', id, reportes[idx]);
+    _cache.reportes = reportes;
+    closeModal('modal-edit-reporte-chofer');
+    toast('Reporte actualizado correctamente', 'success');
+    const pg = document.querySelector('.page.active');
+    if (pg && pg.id === 'page-historial') renderHistorial();
   } catch(e) { console.error(e); toast('Error al guardar', 'error'); }
 }
 
