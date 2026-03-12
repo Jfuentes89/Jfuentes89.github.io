@@ -1705,6 +1705,49 @@ async function fsDelete(col, id) {
 }
 
 // ── Suscripciones en tiempo real ──
+// ══════════════════════════════════════════════
+//  NOTIFICACIONES AL CHOFER
+// ══════════════════════════════════════════════
+function playNotifSound() {
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    // Dos tonos cortos tipo "ping"
+    [0, 220].forEach(delay => {
+      const osc  = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(880, ctx.currentTime + delay / 1000);
+      osc.frequency.setValueAtTime(1100, ctx.currentTime + delay / 1000 + 0.1);
+      gain.gain.setValueAtTime(0.4, ctx.currentTime + delay / 1000);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + delay / 1000 + 0.35);
+      osc.start(ctx.currentTime + delay / 1000);
+      osc.stop(ctx.currentTime + delay / 1000 + 0.35);
+    });
+  } catch(e) { /* AudioContext no disponible */ }
+}
+
+async function notificarChofer(viaje) {
+  playNotifSound();
+  // Notificación del sistema si el usuario la autorizó
+  if (Notification.permission === 'granted') {
+    new Notification('🚛 Nuevo viaje asignado', {
+      body: `${viaje.cliente} → ${viaje.destino}\nFecha: ${fmtDate(viaje.fecha)}${viaje.hora ? ' · ' + viaje.hora : ''}`,
+      icon: 'https://jfuentes89.github.io/favicon.ico',
+      tag:  'viaje-' + viaje.id,
+    });
+  }
+  // Toast visible dentro de la app
+  toast('🚛 Nuevo viaje asignado: ' + viaje.cliente + ' → ' + viaje.destino, 'success');
+}
+
+function pedirPermisoNotificacion() {
+  if ('Notification' in window && Notification.permission === 'default') {
+    Notification.requestPermission();
+  }
+}
+
 function subscribeAll() {
   const db = _fdb();
 
@@ -1733,7 +1776,27 @@ function subscribeAll() {
   // Reset diario: limpiar viajes 'completado' de días anteriores del caché visual
   // (no se borran de Firestore, solo no se muestran en el resumen de hoy)
   db.collection('agenda').orderBy('fecha', 'asc').onSnapshot(snap => {
-    _cache.agenda = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    const prevIds   = new Set((_cache.agenda || []).map(v => v.id));
+    const nuevos    = snap.docChanges().filter(c => c.type === 'added' || c.type === 'modified');
+    const sesion    = DB.sesion;
+    _cache.agenda   = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+
+    // Notificar al chofer si le asignaron un viaje nuevo o recién asignado
+    if (sesion && sesion.rol === 'chofer') {
+      nuevos.forEach(c => {
+        const v = { id: c.doc.id, ...c.doc.data() };
+        // Solo si este viaje es para este chofer, tiene estado 'pendiente' y antes no existía o no tenía chofer
+        if (v.chorerId === sesion.id && v.estado === 'pendiente') {
+          const eraDesconocido = !prevIds.has(v.id);
+          const prev = (_cache.agenda || []).find(x => x.id === v.id);
+          const recienAsignado = prev && !prev.chorerId && v.chorerId;
+          if (eraDesconocido || recienAsignado) {
+            notificarChofer(v);
+          }
+        }
+      });
+    }
+
     const pg = document.querySelector('.page.active');
     if (pg && pg.id === 'page-agenda')    renderAgenda();
     if (pg && pg.id === 'page-dashboard') renderDashboard();
@@ -1862,6 +1925,8 @@ function showApp() {
   document.getElementById('filtros-card').style.display   = esAdmin ? '' : 'none';
 
   navigate('dashboard');
+  // Pedir permiso de notificaciones (solo choferes)
+  if (sesion.rol === 'chofer') pedirPermisoNotificacion();
 }
 
 // ══════════════════════════════════════════════
