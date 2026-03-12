@@ -556,6 +556,32 @@ tbody td { padding: .85rem 1rem; color: var(--text-primary); white-space: nowrap
 .modal-body { padding: 1.5rem; }
 .modal-footer { padding: 1.25rem 1.5rem; border-top: 1px solid var(--border); display: flex; gap: .75rem; justify-content: flex-end; }
 .detail-row { display: flex; justify-content: space-between; align-items: baseline; padding: .5rem 0; border-bottom: 1px solid var(--border); }
+
+/* ── Agenda ── */
+.agenda-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); padding: 1.25rem; display: flex; flex-direction: column; gap: .85rem; transition: box-shadow .2s; }
+.agenda-card:hover { box-shadow: var(--shadow); }
+.agenda-card-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; flex-wrap: wrap; }
+.agenda-card-title { font-family: var(--font-title); font-size: 1.3rem; letter-spacing: 1px; color: var(--text-primary); }
+.agenda-badge { padding: .25rem .75rem; border-radius: 20px; font-size: .72rem; font-weight: 700; letter-spacing: .5px; text-transform: uppercase; }
+.agenda-badge.pendiente  { background: rgba(245,158,11,.15);  color: #f59e0b; }
+.agenda-badge.aceptado   { background: rgba(87,213,213,.15);  color: #57D5D5; }
+.agenda-badge.en-ruta    { background: rgba(157,93,217,.15);  color: #9D5DD9; }
+.agenda-badge.completado { background: rgba(54,178,95,.15);   color: #36B25F; }
+.agenda-badge.pendiente-reporte { background: rgba(245,158,11,.15); color: #f59e0b; }
+.agenda-badge.sin-chofer { background: rgba(239,68,68,.15); color: #ef4444; }
+.agenda-card-info { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px,1fr)); gap: .5rem .75rem; }
+.agenda-info-item { display: flex; flex-direction: column; }
+.agenda-info-item label { font-size: .72rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: .5px; }
+.agenda-info-item span  { font-size: .9rem; font-weight: 600; color: var(--text-primary); }
+.agenda-card-actions { display: flex; gap: .5rem; flex-wrap: wrap; margin-top: .25rem; }
+
+/* Tarjeta de viaje asignado en dashboard chofer */
+.viaje-asignado-card { background: linear-gradient(135deg, rgba(118,47,164,.12), rgba(87,213,213,.08)); border: 1px solid rgba(157,93,217,.4); border-radius: var(--radius); padding: 1.25rem; margin-bottom: 1.25rem; }
+.agenda-resumen { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px,1fr)); gap: .75rem; margin-bottom: 1.25rem; }
+.agenda-resumen-item { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: .85rem 1rem; display: flex; flex-direction: column; gap: .25rem; }
+.agenda-resumen-item .ar-num  { font-family: var(--font-title); font-size: 2rem; letter-spacing: 1px; line-height: 1; }
+.agenda-resumen-item .ar-label { font-size: .72rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: .5px; }
+.viaje-asignado-card h3 { font-family: var(--font-title); font-size: 1.2rem; letter-spacing: 1px; color: var(--accent); margin-bottom: .85rem; display: flex; align-items: center; gap: .5rem; }
 .detail-row:last-child { border-bottom: none; }
 .detail-row span:first-child { color: var(--text-secondary); font-size: .85rem; }
 .detail-row span:last-child { font-weight: 600; font-size: .92rem; }
@@ -710,7 +736,7 @@ tbody td { padding: .85rem 1rem; color: var(--text-primary); white-space: nowrap
     <button class="btn btn-primary btn-full" id="login-btn" style="margin-top:.5rem" onclick="doLogin()">
       Iniciar Sesión
     </button>
-    <p style="text-align:center;font-size:.72rem;color:var(--text-muted);margin-top:1rem;letter-spacing:.5px">By DryviSystem</p>
+    <p style="text-align:center;font-size:.72rem;color:var(--text-muted);margin-top:1rem;letter-spacing:.5px">by DrivySystem</p>
 
   </div>
 </div>
@@ -799,6 +825,16 @@ tbody td { padding: .85rem 1rem; color: var(--text-primary); white-space: nowrap
         </div>
 
         <!-- Solo visible para admin -->
+        <div class="nav-item" id="nav-agenda" onclick="navigate('agenda')" style="display:none">
+          <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
+            <line x1="16" y1="2" x2="16" y2="6"/>
+            <line x1="8"  y1="2" x2="8"  y2="6"/>
+            <line x1="3"  y1="10" x2="21" y2="10"/>
+          </svg>
+          Agenda de Viajes
+        </div>
+
         <div class="nav-item" id="nav-admin" onclick="navigate('admin')" style="display:none">
           <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
             <path d="M12 2L2 7l10 5 10-5-10-5z"/>
@@ -861,8 +897,10 @@ tbody td { padding: .85rem 1rem; color: var(--text-primary); white-space: nowrap
           <div id="dash-date" style="font-size:.82rem;color:var(--text-muted)"></div>
         </div>
 
+        <div id="viajes-asignados-container"></div>
         <div class="metric-grid" id="metrics-grid"></div>
 
+        <div id="admin-agenda-resumen"></div>
         <div class="card profit-bar-wrap">
           <div class="profit-bar-header">
             <span style="font-size:.82rem;font-weight:600;color:var(--text-secondary)">RENTABILIDAD GENERAL</span>
@@ -917,6 +955,10 @@ tbody td { padding: .85rem 1rem; color: var(--text-primary); white-space: nowrap
             <div class="form-group">
               <label>Destino</label>
               <input type="text" id="r-destino" placeholder="Ej. Monterrey, NL">
+            </div>
+            <div class="form-group">
+              <label>Entregado a</label>
+              <input type="text" id="r-entregado" placeholder="Ej. Juan Pérez">
             </div>
           </div>
 
@@ -1038,17 +1080,7 @@ tbody td { padding: .85rem 1rem; color: var(--text-primary); white-space: nowrap
 
         <!-- Tabla -->
         <div class="table-wrap" style="margin-top:1rem">
-          <table>
-            <thead>
-              <tr>
-                <th>Fecha</th>
-                <th>Unidad</th>
-                <th>Utilidad</th>
-                <th>Acciones</th>
-              </tr>
-            </thead>
-            <tbody id="historial-tbody"></tbody>
-          </table>
+          <div id="historial-tbody" style="display:flex;flex-direction:column;gap:.6rem;margin-top:.25rem"></div>
         </div>
 
         <div id="historial-empty" class="empty-state" style="display:none">
@@ -1062,6 +1094,23 @@ tbody td { padding: .85rem 1rem; color: var(--text-primary); white-space: nowrap
       </div>
 
       <!-- ══ ADMINISTRACIÓN ══ -->
+      <!-- ════════════════ AGENDA ════════════════ -->
+      <div class="page" id="page-agenda">
+        <div class="page-header">
+          <div>
+            <h1>Agenda de Viajes</h1>
+            <p id="agenda-subtitle">Programa y gestiona los viajes asignados</p>
+          </div>
+          <button class="btn btn-primary" onclick="openModalAgenda()">
+            <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/>
+            </svg>
+            Agendar Viaje
+          </button>
+        </div>
+        <div id="agenda-list" style="display:flex;flex-direction:column;gap:1rem;margin-top:1rem"></div>
+      </div>
+
       <div class="page" id="page-admin">
         <div class="page-header">
           <div><h1>Administración</h1><p>Gestión de personal y flota</p></div>
@@ -1227,20 +1276,17 @@ tbody td { padding: .85rem 1rem; color: var(--text-primary); white-space: nowrap
     <div class="modal-body" id="modal-detalle-body"></div>
     <div class="modal-footer">
       <button class="btn btn-secondary" onclick="closeModal('modal-detalle')">Cerrar</button>
+      <button class="btn btn-secondary" id="modal-edit-btn" style="border-color:var(--accent);color:var(--accent)">
+        <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+        Editar
+      </button>
       <button class="btn btn-success"   id="modal-share-btn">
         <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
           <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
         </svg>
         WhatsApp
       </button>
-      <button class="btn btn-primary" id="modal-pdf-btn">
-        <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-          <polyline points="7 10 12 15 17 10"/>
-          <line x1="12" y1="15" x2="12" y2="3"/>
-        </svg>
-        Exportar PDF
-      </button>
+
     </div>
   </div>
 </div>
@@ -1248,6 +1294,228 @@ tbody td { padding: .85rem 1rem; color: var(--text-primary); white-space: nowrap
 <!-- ══════════════════════════════════════════
      MODAL — Confirmación de eliminación
 ══════════════════════════════════════════ -->
+<!-- ══════════════════════════════════════════
+     MODAL — Nuevo Viaje Agenda
+══════════════════════════════════════════ -->
+<div class="modal-overlay" id="modal-nuevo-viaje-agenda">
+  <div class="modal" style="max-width:480px">
+    <div class="modal-header">
+      <h3>Agendar Viaje</h3>
+      <button class="btn-icon" onclick="closeModal('modal-nuevo-viaje-agenda')">
+        <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+        </svg>
+      </button>
+    </div>
+    <div class="modal-body" style="display:flex;flex-direction:column;gap:.85rem">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:.75rem">
+        <div class="form-group">
+          <label>Fecha</label>
+          <input type="date" id="av-fecha">
+        </div>
+        <div class="form-group">
+          <label>Hora de salida</label>
+          <input type="time" id="av-hora">
+        </div>
+      </div>
+      <div class="form-group">
+        <label>Cliente</label>
+        <input type="text" id="av-cliente" placeholder="Ej. CEMEX">
+      </div>
+      <div class="form-group">
+        <label>Destino</label>
+        <input type="text" id="av-destino" placeholder="Ej. Monterrey, NL">
+      </div>
+      <div class="form-group">
+        <label>Precio de viaje</label>
+        <input type="number" id="av-flete" placeholder="$0.00" min="0" step="0.01">
+      </div>
+      <div class="form-group">
+        <label>Asignar Chofer</label>
+        <select id="av-chofer"></select>
+      </div>
+      <div class="form-group">
+        <label>Unidad</label>
+        <select id="av-unidad"></select>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('modal-nuevo-viaje-agenda')">Cancelar</button>
+      <button class="btn btn-primary"   onclick="saveViajeAgenda()">Agendar Viaje</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════
+     MODAL — Editar Viaje Agendado
+══════════════════════════════════════════ -->
+<div class="modal-overlay" id="modal-edit-viaje-agenda">
+  <div class="modal" style="max-width:480px">
+    <div class="modal-header">
+      <h3>Editar Viaje Agendado</h3>
+      <button class="btn-icon" onclick="closeModal('modal-edit-viaje-agenda')">
+        <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+        </svg>
+      </button>
+    </div>
+    <div class="modal-body" style="display:flex;flex-direction:column;gap:.85rem">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:.75rem">
+        <div class="form-group">
+          <label>Fecha</label>
+          <input type="date" id="ea-fecha">
+        </div>
+        <div class="form-group">
+          <label>Hora de salida</label>
+          <input type="time" id="ea-hora">
+        </div>
+      </div>
+      <div class="form-group">
+        <label>Cliente</label>
+        <input type="text" id="ea-cliente" placeholder="Ej. CEMEX">
+      </div>
+      <div class="form-group">
+        <label>Destino</label>
+        <input type="text" id="ea-destino" placeholder="Ej. Monterrey, NL">
+      </div>
+      <div class="form-group">
+        <label>Precio de viaje</label>
+        <input type="number" id="ea-flete" placeholder="$0.00" min="0" step="0.01">
+      </div>
+      <div class="form-group">
+        <label>Chofer asignado</label>
+        <select id="ea-chofer"></select>
+      </div>
+      <div class="form-group">
+        <label>Unidad</label>
+        <select id="ea-unidad"></select>
+      </div>
+      <input type="hidden" id="ea-id">
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('modal-edit-viaje-agenda')">Cancelar</button>
+      <button class="btn btn-primary"   onclick="saveEditViajeAgenda()">Guardar Cambios</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════
+     MODAL — Asignar Chofer a Viaje
+══════════════════════════════════════════ -->
+<div class="modal-overlay" id="modal-asignar-chofer">
+  <div class="modal" style="max-width:380px">
+    <div class="modal-header">
+      <h3>Asignar Chofer</h3>
+      <button class="btn-icon" onclick="closeModal('modal-asignar-chofer')">
+        <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+        </svg>
+      </button>
+    </div>
+    <div class="modal-body" style="display:flex;flex-direction:column;gap:.85rem">
+      <div class="form-group">
+        <label>Selecciona el chofer</label>
+        <select id="ac-chofer"></select>
+      </div>
+      <div class="form-group">
+        <label>Unidad</label>
+        <select id="ac-unidad"></select>
+      </div>
+      <input type="hidden" id="ac-id">
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('modal-asignar-chofer')">Cancelar</button>
+      <button class="btn btn-primary"   onclick="saveAsignarChofer()">Asignar</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════
+     MODAL — Editar Reporte
+══════════════════════════════════════════ -->
+<div class="modal-overlay" id="modal-edit-reporte">
+  <div class="modal" style="max-width:520px">
+    <div class="modal-header">
+      <h3>Editar Viaje</h3>
+      <button class="btn-icon" onclick="closeModal('modal-edit-reporte')">
+        <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+        </svg>
+      </button>
+    </div>
+    <div class="modal-body" style="display:flex;flex-direction:column;gap:.85rem">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:.75rem">
+        <div class="form-group">
+          <label>Fecha</label>
+          <input type="date" id="er-fecha">
+        </div>
+        <div class="form-group">
+          <label>Cliente</label>
+          <input type="text" id="er-cliente" placeholder="Ej. CEMEX">
+        </div>
+        <div class="form-group">
+          <label>Destino</label>
+          <input type="text" id="er-destino" placeholder="Ej. Monterrey, NL">
+        </div>
+        <div class="form-group">
+          <label>Entregado a</label>
+          <input type="text" id="er-entregado" placeholder="Ej. Juan Pérez">
+        </div>
+      </div>
+      <div class="form-group">
+        <label>Precio de viaje</label>
+        <input type="number" id="er-flete" placeholder="$0.00" min="0" step="0.01">
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:.75rem">
+        <div class="form-group">
+          <label>Diesel</label>
+          <input type="number" id="er-diesel" placeholder="$0.00" min="0" step="0.01">
+        </div>
+        <div class="form-group">
+          <label>Pago de chófer</label>
+          <input type="number" id="er-pago-chofer" placeholder="$0.00" min="0" step="0.01">
+        </div>
+      </div>
+      <input type="hidden" id="er-id">
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('modal-edit-reporte')">Cancelar</button>
+      <button class="btn btn-primary"   onclick="saveEditReporte()">Guardar Cambios</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════
+     MODAL — Editar Unidad
+══════════════════════════════════════════ -->
+<div class="modal-overlay" id="modal-edit-unidad">
+  <div class="modal" style="max-width:420px">
+    <div class="modal-header">
+      <h3>Editar Unidad</h3>
+      <button class="btn-icon" onclick="closeModal('modal-edit-unidad')">
+        <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+        </svg>
+      </button>
+    </div>
+    <div class="modal-body" style="display:flex;flex-direction:column;gap:.9rem">
+      <div class="form-group">
+        <label>Placa</label>
+        <input type="text" id="edit-unidad-placa" placeholder="Ej. ABC-123">
+      </div>
+      <div class="form-group">
+        <label>Modelo</label>
+        <input type="text" id="edit-unidad-modelo" placeholder="Ej. Kenworth T680">
+      </div>
+      <input type="hidden" id="edit-unidad-id">
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('modal-edit-unidad')">Cancelar</button>
+      <button class="btn btn-primary"   onclick="saveEditUnidad()">Guardar Cambios</button>
+    </div>
+  </div>
+</div>
+
 <!-- ══════════════════════════════════════════
      MODAL — Editar Chofer
 ══════════════════════════════════════════ -->
@@ -1331,7 +1599,7 @@ tbody td { padding: .85rem 1rem; color: var(--text-primary); white-space: nowrap
 const ADMIN_DEFAULT = { id: 'c0', nombre: 'Administrador', username: 'admin', password: 'admin123', rol: 'admin' };
 
 // Caché local (se sincroniza con Firestore)
-const _cache = { choferes: [], unidades: [], reportes: [] };
+const _cache = { choferes: [], unidades: [], reportes: [], agenda: [] };
 
 // Sesión: solo en localStorage (no viaja a la nube)
 const _mem = {};
@@ -1346,6 +1614,7 @@ const DB = {
   get choferes()  { return _cache.choferes; },
   get unidades()  { return _cache.unidades; },
   get reportes()  { return _cache.reportes; },
+  get agenda()    { return _cache.agenda;   },
   get sesion()    { return JSON.parse(_sessionStore.getItem('sesionActual') || 'null'); },
   set sesion(v)   { 
     if (v === null) _sessionStore.removeItem('sesionActual');
@@ -1354,10 +1623,16 @@ const DB = {
 };
 
 // ── Esperar a que Firebase esté listo (polling robusto) ──
-const _fbReady = new Promise(resolve => {
+const _fbReady = new Promise((resolve, reject) => {
+  let intentos = 0;
   const check = () => {
-    if (window._firebaseReady && window._db) { resolve(); }
-    else { setTimeout(check, 50); }
+    if (window._firebaseReady && window._db) {
+      resolve();
+    } else if (intentos++ > 100) { // 5 segundos máximo
+      reject(new Error('Firebase no cargó a tiempo'));
+    } else {
+      setTimeout(check, 50);
+    }
   };
   check();
 });
@@ -1404,21 +1679,32 @@ function subscribeAll() {
     if (pg && pg.id === 'page-dashboard') renderDashboard();
     if (pg && pg.id === 'page-historial') renderHistorial();
   });
+
+  // Reset diario: limpiar viajes 'completado' de días anteriores del caché visual
+  // (no se borran de Firestore, solo no se muestran en el resumen de hoy)
+  db.collection('agenda').orderBy('fecha', 'asc').onSnapshot(snap => {
+    _cache.agenda = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    const pg = document.querySelector('.page.active');
+    if (pg && pg.id === 'page-agenda')    renderAgenda();
+    if (pg && pg.id === 'page-dashboard') renderDashboard();
+  });
 }
 
 // ── Carga inicial + suscripciones ──
 async function initDefaults() {
   await _fbReady;
 
-  const [choferes, unidades, reportes] = await Promise.all([
+  const [choferes, unidades, reportes, agenda] = await Promise.all([
     fsGetAll('choferes'),
     fsGetAll('unidades'),
     fsGetAll('reportes'),
+    fsGetAll('agenda'),
   ]);
 
   _cache.choferes = choferes;
   _cache.unidades = unidades;
   _cache.reportes = reportes;
+  _cache.agenda   = agenda;
 
   if (!_cache.choferes.find(c => c.id === 'c0')) {
     await fsSet('choferes', 'c0', ADMIN_DEFAULT);
@@ -1517,7 +1803,8 @@ function showApp() {
   document.getElementById('user-name-display').textContent = sesion.nombre;
   document.getElementById('user-role-display').textContent = sesion.rol === 'admin' ? 'Administrador' : 'Chofer';
   document.getElementById('user-avatar').textContent = sesion.nombre.charAt(0).toUpperCase();
-  document.getElementById('nav-admin').style.display = sesion.rol === 'admin' ? 'flex' : 'none';
+  document.getElementById('nav-admin').style.display  = sesion.rol === 'admin' ? 'flex' : 'none';
+  document.getElementById('nav-agenda').style.display = sesion.rol === 'admin' ? 'flex' : 'none';
 
   // Historial: ocultar filtros y botón PDF para rol chofer
   const esAdmin = sesion.rol === 'admin';
@@ -1539,6 +1826,7 @@ function navigate(page) {
     'nuevo-reporte':     'page-nuevo-reporte',
     'historial':         'page-historial',
     'admin':             'page-admin',
+    'agenda':            'page-agenda',
     'cambiar-password':  'page-cambiar-password',
   };
 
@@ -1559,6 +1847,7 @@ function navigate(page) {
   if (page === 'nuevo-reporte')    initForm();
   if (page === 'historial')        renderHistorial();
   if (page === 'admin')            renderAdmin();
+  if (page === 'agenda')           renderAgenda();
 }
 
 function toggleSidebar() {
@@ -1627,10 +1916,6 @@ function renderDashboard() {
         <div class="metric-value">${numViajes}</div>
         <div class="metric-sub">${todosReportes.length} en total histórico</div>
       </div>
-      <div class="metric-card" style="grid-column:1/-1;background:linear-gradient(135deg,#762FA4,#9D5DD9);border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:.75rem;padding:1.4rem;" onclick="navigate('nuevo-reporte')">
-        <svg width="22" height="22" fill="none" stroke="#fff" stroke-width="2.5" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
-        <span style="font-family:var(--font-title);font-size:1.5rem;letter-spacing:2px;color:#fff">REGISTRAR VIAJE</span>
-      </div>
     `;
 
     // Ocultar barra de rentabilidad para chofer
@@ -1677,6 +1962,44 @@ function renderDashboard() {
       ? 'linear-gradient(90deg,#ef4444,#fca5a5)'
       : 'linear-gradient(90deg,#36B25F,#57D5D5)';
     pctEl.textContent = pct + '%';
+
+    // ── Resumen agenda del día ──
+    const hoy = ahora.toISOString().slice(0,10);
+    const agendaHoy = DB.agenda.filter(v => v.fecha === hoy);
+    const numAceptados       = agendaHoy.filter(v => v.estado === 'aceptado').length;
+    const numEnRuta          = agendaHoy.filter(v => v.estado === 'en-ruta').length;
+    const numPendReporte     = agendaHoy.filter(v => v.estado === 'pendiente-reporte').length;
+    const numCompletados     = agendaHoy.filter(v => v.estado === 'completado').length;
+    const numPendientes      = agendaHoy.filter(v => v.estado === 'pendiente').length;
+    const resumenEl = document.getElementById('admin-agenda-resumen');
+    if (resumenEl && agendaHoy.length > 0) {
+      resumenEl.innerHTML = `
+        <div style="font-size:.75rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:.5rem;font-weight:600">Agenda de hoy</div>
+        <div class="agenda-resumen">
+          <div class="agenda-resumen-item">
+            <span class="ar-num" style="color:var(--warning)">${numPendientes}</span>
+            <span class="ar-label">Pendientes</span>
+          </div>
+          <div class="agenda-resumen-item">
+            <span class="ar-num" style="color:#57D5D5">${numAceptados}</span>
+            <span class="ar-label">Aceptados</span>
+          </div>
+          <div class="agenda-resumen-item">
+            <span class="ar-num" style="color:#9D5DD9">${numEnRuta}</span>
+            <span class="ar-label">En Ruta</span>
+          </div>
+          <div class="agenda-resumen-item">
+            <span class="ar-num" style="color:#f59e0b">${numPendReporte}</span>
+            <span class="ar-label">Sin Reporte</span>
+          </div>
+          <div class="agenda-resumen-item">
+            <span class="ar-num" style="color:#36B25F">${numCompletados}</span>
+            <span class="ar-label">Completados</span>
+          </div>
+        </div>`;
+    } else if (resumenEl) {
+      resumenEl.innerHTML = '';
+    }
   }
 
   // ── Actividad reciente (últimos 5 del mes para ambos roles) ──
@@ -1691,6 +2014,12 @@ function renderDashboard() {
   }
 
   if (esChofer) {
+    // Insertar tarjetas de viajes asignados ANTES de la actividad
+    const viajesHtml = renderViajesChofer(sesion);
+    if (viajesHtml) {
+      const viajesContainer = document.getElementById('viajes-asignados-container');
+      if (viajesContainer) viajesContainer.innerHTML = viajesHtml;
+    }
     al.innerHTML = recientes.map(r => `
       <div class="activity-item" onclick="showDetalle('${r.id}')">
         <div class="activity-badge" style="background:var(--success)"></div>
@@ -1752,6 +2081,7 @@ function initForm() {
   const gp = document.getElementById('g-pago-chofer'); if (gp) gp.value = '';
   document.getElementById('r-cliente').value          = '';
   document.getElementById('r-destino').value          = '';
+  document.getElementById('r-entregado').value        = '';
   calcLive();
 }
 
@@ -1806,7 +2136,23 @@ function calcLive() {
   uEl.className   = utilidad >= 0 ? 'positive' : 'negative';
 }
 
-function resetForm() { initForm(); }
+function resetForm() {
+  // Si el chofer cancela con Limpiar, desvincula el viaje y desbloquea el form
+  window._viajeAgendaIdPendiente = null;
+  ['r-fecha','r-cliente','r-destino','r-flete'].forEach(fid => {
+    const el = document.getElementById(fid); if (el) el.readOnly = false;
+  });
+  const uSel = document.getElementById('r-unidad'); if (uSel) uSel.disabled = false;
+  const cSel = document.getElementById('r-chofer'); if (cSel) cSel.disabled = false;
+  // Restaurar botón guardar
+  const btn = document.querySelector('button[onclick="saveReporte()"]');
+  if (btn) {
+    btn.innerHTML = '<svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg> Guardar Reporte';
+    btn.style.background = '';
+    btn.style.border = '';
+  }
+  initForm();
+}
 
 async function saveReporte() {
   const sesion   = DB.sesion;
@@ -1814,7 +2160,8 @@ async function saveReporte() {
   const chorerId = document.getElementById('r-chofer').value;
   const unidadId = document.getElementById('r-unidad').value;
   const cliente  = document.getElementById('r-cliente').value.trim();
-  const destino  = document.getElementById('r-destino').value.trim();
+  const destino    = document.getElementById('r-destino').value.trim();
+  const entregadoA = document.getElementById('r-entregado').value.trim();
   const flete    = parseFloat(document.getElementById('r-flete').value) || 0;
 
   if (!fecha)     { toast('Selecciona la fecha del viaje', 'warning'); return; }
@@ -1862,6 +2209,7 @@ async function saveReporte() {
     unidadModelo: unidad?.modelo  || '',
     cliente,
     destino,
+    entregadoA,
     flete,
     ingresosExtra,
     gastos,
@@ -1873,9 +2221,18 @@ async function saveReporte() {
 
   try {
     await fsSet('reportes', reporte.id, reporte);
-    toast('Reporte guardado correctamente ✓', 'success');
-    resetForm();
-    navigate('historial');
+    // Si hay un viaje agendado vinculado, marcarlo como completado
+    if (window._viajeAgendaIdPendiente) {
+      await _actualizarEstadoViaje(window._viajeAgendaIdPendiente, 'completado');
+      window._viajeAgendaIdPendiente = null;
+      toast('Viaje finalizado y reporte guardado ✓', 'success');
+      resetForm();
+      navigate('dashboard');  // volver al dashboard para que vea la tarjeta desaparecer
+    } else {
+      toast('Reporte guardado correctamente ✓', 'success');
+      resetForm();
+      navigate('historial');
+    }
   } catch(e) {
     console.error(e);
     toast('Error al guardar. Verifica tu conexión.', 'error');
@@ -1915,23 +2272,27 @@ function renderHistorial() {
   const tbody = document.getElementById('historial-tbody');
 
   if (!filtrados.length) {
-    tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;padding:2rem;color:var(--text-muted)">Sin registros</td></tr>';
+    tbody.innerHTML = '<div class="empty-state" style="padding:2rem 0"><p>Sin registros encontrados.</p></div>';
     return;
   }
 
   tbody.innerHTML = filtrados.map(r => {
     const pos = r.utilidad >= 0;
-    return `<tr>
-      <td>${fmtDate(r.fecha)}</td>
-      <td><span class="badge badge-info">${r.unidadPlaca}</span></td>
-      <td><span class="badge ${pos ? 'badge-success' : 'badge-danger'}">${fmt(r.utilidad)}</span></td>
-      <td>
-        <div class="table-actions">
+    return `
+    <div class="activity-item" style="cursor:default">
+      <div class="activity-badge" style="background:${pos ? 'var(--success)' : 'var(--danger)'}"></div>
+      <div class="activity-info" style="flex:1;min-width:0">
+        <strong>${r.cliente || 'Sin cliente'} — ${r.destino || ''}</strong>
+        <span>${fmtDate(r.fecha)} · ${r.unidadModelo || r.unidadPlaca} · ${r.choferNombre}</span>
+      </div>
+      <div style="display:flex;flex-direction:column;align-items:flex-end;gap:.35rem;flex-shrink:0">
+        <span class="activity-amount ${pos ? 'positive' : 'negative'}">${fmt(r.utilidad)}</span>
+        <div style="display:flex;gap:.35rem">
           <button class="btn btn-secondary btn-sm" onclick="showDetalle('${r.id}')">Ver</button>
           <button class="btn btn-danger btn-sm"    onclick="confirmDelete('${r.id}')">✕</button>
         </div>
-      </td>
-    </tr>`;
+      </div>
+    </div>`;
   }).join('');
 }
 
@@ -1972,6 +2333,7 @@ function showDetalle(id) {
     <div class="detail-row"><span>Fecha</span><span>${fmtDate(r.fecha)}</span></div>
     <div class="detail-row"><span>Cliente</span><span>${r.cliente}</span></div>
     <div class="detail-row"><span>Destino</span><span>${r.destino || '—'}</span></div>
+    <div class="detail-row"><span>Entregado a</span><span>${r.entregadoA || '—'}</span></div>
     <div class="detail-row"><span>Unidad</span><span>${r.unidadPlaca} — ${r.unidadModelo}</span></div>
     <div class="detail-row"><span>Chofer</span><span>${r.choferNombre}</span></div>
 
@@ -1999,14 +2361,336 @@ function showDetalle(id) {
       </span>
     </div>`;
 
-  document.getElementById('modal-pdf-btn').onclick   = () => exportSinglePDF(id);
   document.getElementById('modal-share-btn').onclick = () => shareWhatsApp(id);
+  document.getElementById('modal-edit-btn').onclick  = () => openEditReporte(id);
   openModal('modal-detalle');
 }
 
 // ══════════════════════════════════════════════
 //  ADMINISTRACIÓN
 // ══════════════════════════════════════════════
+// ══════════════════════════════════════════════
+//  AGENDA DE VIAJES
+// ══════════════════════════════════════════════
+
+function renderAgenda() {
+  const lista = DB.agenda;
+  const el    = document.getElementById('agenda-list');
+  if (!el) return;
+
+  if (!lista.length) {
+    el.innerHTML = '<div class="empty-state"><p>Sin viajes agendados.</p></div>';
+    return;
+  }
+
+  const estadoBadge = {
+    'sin-chofer': 'Sin Asignar',
+    pendiente:    'Pendiente',
+    aceptado:     'Aceptado',
+    'en-ruta':    'En Ruta',
+    completado:   'Completado'
+  };
+
+  el.innerHTML = lista.map(v => {
+    const chofer = DB.choferes.find(c => c.id === v.chorerId);
+    const unidad = DB.unidades.find(u => u.id === v.unidadId);
+    // Si no tiene chofer asignado, mostrar estado especial
+    const estado = !v.chorerId ? 'sin-chofer' : (v.estado || 'pendiente');
+
+    const btnAsignar = !v.chorerId
+      ? `<button class="btn btn-primary btn-sm" onclick="openAsignarChofer('${v.id}')">
+           <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+           Asignar Chofer
+         </button>`
+      : '';
+
+    return `
+    <div class="agenda-card">
+      <div class="agenda-card-header">
+        <div class="agenda-card-title">${v.cliente} → ${v.destino}</div>
+        <span class="agenda-badge ${estado}">${estadoBadge[estado] || estado}</span>
+      </div>
+      <div class="agenda-card-info">
+        <div class="agenda-info-item"><label>Fecha</label><span>${fmtDate(v.fecha)}</span></div>
+        <div class="agenda-info-item"><label>Hora salida</label><span>${v.hora || '—'}</span></div>
+        <div class="agenda-info-item"><label>Chofer</label><span>${chofer ? chofer.nombre : '⚠ Sin asignar'}</span></div>
+        <div class="agenda-info-item"><label>Unidad</label><span>${unidad ? unidad.modelo + ' (' + unidad.placa + ')' : '—'}</span></div>
+        <div class="agenda-info-item"><label>Precio</label><span style="color:var(--success)">${fmt(v.flete)}</span></div>
+      </div>
+      <div class="agenda-card-actions">
+        ${btnAsignar}
+        <button class="btn btn-secondary btn-sm" onclick="openEditViajeAgenda('${v.id}')">
+          <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+          Editar
+        </button>
+        <button class="btn btn-danger btn-sm" onclick="deleteViajeAgenda('${v.id}')">Eliminar</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function openModalAgenda() {
+  // Poblar selects de chofer y unidad
+  const choferes = DB.choferes.filter(c => c.id !== 'c0');
+  document.getElementById('av-chofer').innerHTML =
+    '<option value="">Sin asignar</option>' +
+    choferes.map(c => `<option value="${c.id}">${c.nombre}</option>`).join('');
+  document.getElementById('av-unidad').innerHTML =
+    '<option value="">Sin asignar</option>' +
+    DB.unidades.map(u => `<option value="${u.id}">${u.modelo} (${u.placa})</option>`).join('');
+  // Fecha por defecto hoy
+  document.getElementById('av-fecha').value = new Date().toISOString().slice(0,10);
+  openModal('modal-nuevo-viaje-agenda');
+}
+
+async function saveViajeAgenda() {
+  const fecha    = document.getElementById('av-fecha').value;
+  const hora     = document.getElementById('av-hora').value;
+  const cliente  = document.getElementById('av-cliente').value.trim();
+  const destino  = document.getElementById('av-destino').value.trim();
+  const flete    = parseFloat(document.getElementById('av-flete').value) || 0;
+  const chorerId = document.getElementById('av-chofer').value;
+  const unidadId = document.getElementById('av-unidad').value;
+
+  if (!fecha || !cliente || !destino || flete <= 0) {
+    toast('Completa fecha, cliente, destino y precio', 'warning'); return;
+  }
+
+  const estado = chorerId ? 'pendiente' : 'sin-chofer';
+  const viaje = { id: uid(), fecha, hora, cliente, destino, flete, chorerId, unidadId, estado, creadoEn: new Date().toISOString() };
+
+  try {
+    await fsSet('agenda', viaje.id, viaje);
+    // Limpiar
+    ['av-fecha','av-hora','av-cliente','av-destino','av-flete'].forEach(id => document.getElementById(id).value = '');
+    document.getElementById('av-chofer').value = '';
+    document.getElementById('av-unidad').value = '';
+    closeModal('modal-nuevo-viaje-agenda');
+    toast('Viaje agendado correctamente', 'success');
+  } catch(e) { console.error(e); toast('Error al agendar', 'error'); }
+}
+
+function openEditViajeAgenda(id) {
+  const v = DB.agenda.find(x => x.id === id);
+  if (!v) return;
+  // Poblar selects
+  const choferes = DB.choferes.filter(c => c.id !== 'c0');
+  document.getElementById('ea-chofer').innerHTML =
+    '<option value="">Sin asignar</option>' +
+    choferes.map(c => `<option value="${c.id}"${v.chorerId === c.id ? ' selected' : ''}>${c.nombre}</option>`).join('');
+  document.getElementById('ea-unidad').innerHTML =
+    '<option value="">Sin asignar</option>' +
+    DB.unidades.map(u => `<option value="${u.id}"${v.unidadId === u.id ? ' selected' : ''}>${u.modelo} (${u.placa})</option>`).join('');
+  // Precargar datos
+  document.getElementById('ea-id').value      = v.id;
+  document.getElementById('ea-fecha').value   = v.fecha  || '';
+  document.getElementById('ea-hora').value    = v.hora   || '';
+  document.getElementById('ea-cliente').value = v.cliente || '';
+  document.getElementById('ea-destino').value = v.destino || '';
+  document.getElementById('ea-flete').value   = v.flete  || '';
+  openModal('modal-edit-viaje-agenda');
+}
+
+async function saveEditViajeAgenda() {
+  const id       = document.getElementById('ea-id').value;
+  const fecha    = document.getElementById('ea-fecha').value;
+  const hora     = document.getElementById('ea-hora').value;
+  const cliente  = document.getElementById('ea-cliente').value.trim();
+  const destino  = document.getElementById('ea-destino').value.trim();
+  const flete    = parseFloat(document.getElementById('ea-flete').value) || 0;
+  const chorerId = document.getElementById('ea-chofer').value;
+  const unidadId = document.getElementById('ea-unidad').value;
+
+  if (!fecha || !cliente || !destino || flete <= 0) {
+    toast('Completa fecha, cliente, destino y precio', 'warning'); return;
+  }
+
+  const agenda = [...DB.agenda];
+  const idx = agenda.findIndex(v => v.id === id);
+  if (idx === -1) { toast('Viaje no encontrado', 'error'); return; }
+
+  agenda[idx] = { ...agenda[idx], fecha, hora, cliente, destino, flete, chorerId, unidadId };
+
+  try {
+    await fsSet('agenda', id, agenda[idx]);
+    _cache.agenda = agenda;
+    closeModal('modal-edit-viaje-agenda');
+    toast('Viaje actualizado correctamente', 'success');
+    renderAgenda();
+  } catch(e) { console.error(e); toast('Error al guardar', 'error'); }
+}
+
+function openAsignarChofer(id) {
+  const v = DB.agenda.find(x => x.id === id);
+  if (!v) return;
+  const choferes = DB.choferes.filter(c => c.id !== 'c0');
+  document.getElementById('ac-chofer').innerHTML =
+    '<option value="">Selecciona un chofer...</option>' +
+    choferes.map(c => `<option value="${c.id}">${c.nombre}</option>`).join('');
+  document.getElementById('ac-unidad').innerHTML =
+    '<option value="">Sin asignar</option>' +
+    DB.unidades.map(u => `<option value="${u.id}">${u.modelo} (${u.placa})</option>`).join('');
+  document.getElementById('ac-id').value = id;
+  openModal('modal-asignar-chofer');
+}
+
+async function saveAsignarChofer() {
+  const id       = document.getElementById('ac-id').value;
+  const chorerId = document.getElementById('ac-chofer').value;
+  const unidadId = document.getElementById('ac-unidad').value;
+
+  if (!chorerId) { toast('Selecciona un chofer', 'warning'); return; }
+
+  const agenda = [...DB.agenda];
+  const idx = agenda.findIndex(v => v.id === id);
+  if (idx === -1) { toast('Viaje no encontrado', 'error'); return; }
+
+  agenda[idx] = { ...agenda[idx], chorerId, unidadId, estado: 'pendiente' };
+
+  try {
+    await fsSet('agenda', id, agenda[idx]);
+    _cache.agenda = agenda;
+    closeModal('modal-asignar-chofer');
+    toast('Chofer asignado correctamente', 'success');
+    renderAgenda();
+  } catch(e) { console.error(e); toast('Error al asignar', 'error'); }
+}
+
+function deleteViajeAgenda(id) {
+  openModal('modal-confirm');
+  document.getElementById('confirm-msg').textContent = '¿Eliminar este viaje agendado?';
+  document.getElementById('confirm-ok-btn').onclick = async () => {
+    closeModal('modal-confirm');
+    try {
+      await fsDelete('agenda', id);
+      _cache.agenda = _cache.agenda.filter(v => v.id !== id);
+      toast('Viaje eliminado', 'info');
+      renderAgenda();
+    } catch(e) { toast('Error al eliminar', 'error'); }
+  };
+}
+
+async function choferAceptarViaje(id) {
+  await _actualizarEstadoViaje(id, 'aceptado');
+  toast('¡Viaje aceptado!', 'success');
+}
+
+async function choferIniciarViaje(id) {
+  await _actualizarEstadoViaje(id, 'en-ruta');
+  toast('¡Viaje iniciado! En ruta.', 'info');
+}
+
+async function choferFinalizarViaje(id) {
+  const viaje = DB.agenda.find(v => v.id === id);
+  if (!viaje) return;
+  // Guardar id para marcar completado al guardar el reporte
+  window._viajeAgendaIdPendiente = id;
+  navigate('nuevo-reporte');
+  setTimeout(() => {
+    const g = (sel) => document.getElementById(sel);
+    // Precargar datos del viaje
+    if (g('r-fecha'))   g('r-fecha').value   = viaje.fecha || new Date().toISOString().slice(0,10);
+    if (g('r-cliente')) g('r-cliente').value = viaje.cliente || '';
+    if (g('r-destino')) g('r-destino').value = viaje.destino || '';
+    if (g('r-flete'))   { g('r-flete').value = viaje.flete || ''; calcLive(); }
+    if (viaje.chorerId && g('r-chofer')) g('r-chofer').value = viaje.chorerId;
+    if (viaje.unidadId && g('r-unidad')) g('r-unidad').value = viaje.unidadId;
+    // Bloquear campos para que el chofer no los modifique
+    ['r-fecha','r-cliente','r-destino','r-flete'].forEach(fid => {
+      const el = g(fid); if (el) el.readOnly = true;
+    });
+    if (g('r-unidad')) g('r-unidad').disabled = true;
+    if (g('r-chofer')) g('r-chofer').disabled = true;
+    // Cambiar botón a "Finalizar Viaje"
+    const btn = document.querySelector('button[onclick="saveReporte()"]');
+    if (btn) {
+      btn.innerHTML = '<svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/></svg> Finalizar Viaje';
+      btn.style.background = 'linear-gradient(135deg,#36B25F,#57D5D5)';
+      btn.style.border = 'none';
+    }
+  }, 300);
+}
+
+function reabrirReportePendiente(id) {
+  const viaje = DB.agenda.find(v => v.id === id);
+  if (!viaje) return;
+  window._viajeAgendaIdPendiente = id;
+  navigate('nuevo-reporte');
+  setTimeout(() => {
+    const el = (sel) => document.getElementById(sel);
+    if (el('r-fecha'))   el('r-fecha').value   = viaje.fecha || new Date().toISOString().slice(0,10);
+    if (el('r-cliente')) el('r-cliente').value  = viaje.cliente || '';
+    if (el('r-destino')) el('r-destino').value  = viaje.destino || '';
+    if (el('r-flete'))   { el('r-flete').value  = viaje.flete || ''; calcLive(); }
+    if (viaje.chorerId && el('r-chofer')) el('r-chofer').value = viaje.chorerId;
+    if (viaje.unidadId && el('r-unidad')) el('r-unidad').value = viaje.unidadId;
+  }, 300);
+}
+
+async function _actualizarEstadoViaje(id, estado) {
+  const agenda = [...DB.agenda];
+  const idx = agenda.findIndex(v => v.id === id);
+  if (idx === -1) return;
+  agenda[idx] = { ...agenda[idx], estado };
+  // Actualizar cache LOCAL de inmediato para que la UI refleje el cambio sin esperar Firestore
+  _cache.agenda = agenda;
+  // Refrescar contenedor de tarjetas del chofer si está visible
+  const sesion = DB.sesion;
+  const container = document.getElementById('viajes-asignados-container');
+  if (container && sesion) container.innerHTML = renderViajesChofer(sesion);
+  // Persistir en Firestore
+  await fsSet('agenda', id, agenda[idx]);
+}
+
+function renderViajesChofer(sesion) {
+  // Retorna HTML de tarjetas de viajes asignados al chofer
+  const viajes = DB.agenda.filter(v => v.chorerId === sesion.id && v.estado !== 'completado');
+  // La tarjeta permanece visible mientras no se guarde el reporte (estado en-ruta)
+  if (!viajes.length) return '';
+
+  const estadoLabel = { pendiente: 'Viaje Asignado', aceptado: 'Viaje Aceptado', 'en-ruta': 'En Ruta' };
+
+  return viajes.map(v => {
+    const unidad = DB.unidades.find(u => u.id === v.unidadId);
+    const estado = v.estado || 'pendiente';
+    let acciones = '';
+    if (estado === 'pendiente') {
+      acciones = `<button class="btn btn-primary" style="width:100%" onclick="choferAceptarViaje('${v.id}')">
+        <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>
+        Aceptar Viaje
+      </button>`;
+    } else if (estado === 'aceptado') {
+      acciones = `<button class="btn btn-primary" style="width:100%;background:linear-gradient(135deg,#57D5D5,#36B25F)" onclick="choferIniciarViaje('${v.id}')">
+        <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+        Iniciar Viaje
+      </button>`;
+    } else if (estado === 'en-ruta') {
+      acciones = `<button class="btn btn-danger" style="width:100%" onclick="choferFinalizarViaje('${v.id}')">
+        <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/></svg>
+        Finalizar Viaje
+      </button>`;
+    }
+    return `
+    <div class="viaje-asignado-card">
+      <h3>
+        <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>
+        </svg>
+        ${estadoLabel[estado] || 'Viaje'}
+      </h3>
+      <div class="agenda-card-info" style="margin-bottom:.85rem">
+        <div class="agenda-info-item"><label>Fecha</label><span>${fmtDate(v.fecha)}</span></div>
+        <div class="agenda-info-item"><label>Hora</label><span>${v.hora || '—'}</span></div>
+        <div class="agenda-info-item"><label>Cliente</label><span>${v.cliente}</span></div>
+        <div class="agenda-info-item"><label>Destino</label><span>${v.destino}</span></div>
+        <div class="agenda-info-item"><label>Precio</label><span style="color:var(--success)">${fmt(v.flete)}</span></div>
+        ${unidad ? `<div class="agenda-info-item"><label>Unidad</label><span>${unidad.modelo}</span></div>` : ''}
+      </div>
+      ${acciones}
+    </div>`;
+  }).join('');
+}
+
 function renderAdmin() {
   const choferes = DB.choferes;
   const unidades = DB.unidades;
@@ -2032,11 +2716,16 @@ function renderAdmin() {
   document.getElementById('unidades-list').innerHTML = unidades.length
     ? unidades.map(u => `
       <div class="admin-list-item">
-        <div>
-          <span>${u.placa}</span>
-          <div style="font-size:.72rem;color:var(--text-muted)">${u.modelo}</div>
+        <div style="flex:1;min-width:0">
+          <span>${u.modelo}</span>
+          <div style="font-size:.72rem;color:var(--text-muted)">${u.placa}</div>
         </div>
-        <button class="btn btn-danger btn-sm" onclick="deleteUnidad('${u.id}')">✕</button>
+        <div style="display:flex;gap:.4rem">
+          <button class="btn btn-secondary btn-sm" onclick="openEditUnidad('${u.id}')" title="Editar unidad">
+            <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+          </button>
+          <button class="btn btn-danger btn-sm" onclick="deleteUnidad('${u.id}')">✕</button>
+        </div>
       </div>`).join('')
     : '<p style="color:var(--text-muted);font-size:.85rem;text-align:center;padding:.75rem">Sin unidades</p>';
 }
@@ -2135,6 +2824,95 @@ async function addUnidad() {
   } catch(e) {
     toast('Error al guardar unidad', 'error');
   }
+}
+
+function openEditUnidad(id) {
+  const u = DB.unidades.find(x => x.id === id);
+  if (!u) return;
+  document.getElementById('edit-unidad-id').value    = u.id;
+  document.getElementById('edit-unidad-placa').value  = u.placa;
+  document.getElementById('edit-unidad-modelo').value = u.modelo;
+  openModal('modal-edit-unidad');
+}
+
+async function saveEditUnidad() {
+  const id     = document.getElementById('edit-unidad-id').value;
+  const placa  = document.getElementById('edit-unidad-placa').value.trim().toUpperCase();
+  const modelo = document.getElementById('edit-unidad-modelo').value.trim();
+  if (!placa || !modelo) { toast('Completa placa y modelo', 'warning'); return; }
+  const unidades = [...DB.unidades];
+  const idx = unidades.findIndex(u => u.id === id);
+  if (idx === -1) { toast('Unidad no encontrada', 'error'); return; }
+  unidades[idx] = { ...unidades[idx], placa, modelo };
+  try {
+    await fsSet('unidades', id, unidades[idx]);
+    _cache.unidades = unidades;
+    closeModal('modal-edit-unidad');
+    toast('Unidad actualizada correctamente', 'success');
+    renderAdmin();
+  } catch(e) { console.error(e); toast('Error al guardar', 'error'); }
+}
+
+function openEditReporte(id) {
+  const r = DB.reportes.find(x => x.id === id);
+  if (!r) return;
+  document.getElementById('er-id').value       = r.id;
+  document.getElementById('er-fecha').value    = r.fecha || '';
+  document.getElementById('er-cliente').value  = r.cliente || '';
+  document.getElementById('er-destino').value  = r.destino || '';
+  document.getElementById('er-entregado').value = r.entregadoA || '';
+  document.getElementById('er-flete').value    = r.flete || 0;
+  // gastos fijos
+  const diesel     = (r.gastos || []).find(g => g.concepto === 'Diesel');
+  const pagoChofer = (r.gastos || []).find(g => g.concepto === 'Pago de chófer');
+  document.getElementById('er-diesel').value      = diesel     ? diesel.monto     : '';
+  document.getElementById('er-pago-chofer').value = pagoChofer ? pagoChofer.monto : '';
+  closeModal('modal-detalle');
+  openModal('modal-edit-reporte');
+}
+
+async function saveEditReporte() {
+  const id         = document.getElementById('er-id').value;
+  const fecha      = document.getElementById('er-fecha').value;
+  const cliente    = document.getElementById('er-cliente').value.trim();
+  const destino    = document.getElementById('er-destino').value.trim();
+  const entregadoA = document.getElementById('er-entregado').value.trim();
+  const flete      = parseFloat(document.getElementById('er-flete').value) || 0;
+  const diesel     = parseFloat(document.getElementById('er-diesel').value) || 0;
+  const pagoChofer = parseFloat(document.getElementById('er-pago-chofer').value) || 0;
+
+  if (!fecha || !cliente || !destino || flete <= 0) {
+    toast('Completa los campos obligatorios', 'warning'); return;
+  }
+
+  const reportes = [...DB.reportes];
+  const idx = reportes.findIndex(r => r.id === id);
+  if (idx === -1) { toast('Reporte no encontrado', 'error'); return; }
+
+  // Reconstruir gastos: fijos + los "otros" que ya tenía
+  const otrosGastos = (reportes[idx].gastos || []).filter(g =>
+    g.concepto !== 'Diesel' && g.concepto !== 'Pago de chófer'
+  );
+  const gastos = [];
+  if (diesel > 0)     gastos.push({ concepto: 'Diesel',         monto: diesel });
+  if (pagoChofer > 0) gastos.push({ concepto: 'Pago de chófer', monto: pagoChofer });
+  gastos.push(...otrosGastos);
+
+  const subtotalIngresos = flete + (reportes[idx].ingresosExtra || []).reduce((s,i) => s + i.monto, 0);
+  const subtotalGastos   = gastos.reduce((s, g) => s + g.monto, 0);
+  const utilidad         = subtotalIngresos - subtotalGastos;
+
+  reportes[idx] = { ...reportes[idx], fecha, cliente, destino, entregadoA, flete, gastos, subtotalIngresos, subtotalGastos, utilidad };
+
+  try {
+    await fsSet('reportes', id, reportes[idx]);
+    _cache.reportes = reportes;
+    closeModal('modal-edit-reporte');
+    toast('Reporte actualizado correctamente', 'success');
+    const pg = document.querySelector('.page.active');
+    if (pg && pg.id === 'page-dashboard') renderDashboard();
+    if (pg && pg.id === 'page-historial') renderHistorial();
+  } catch(e) { console.error(e); toast('Error al guardar', 'error'); }
 }
 
 function deleteUnidad(id) {
@@ -2317,40 +3095,62 @@ function exportAllPDF() {
   const { jsPDF } = window.jspdf;
   const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
 
-  doc.setFillColor(15, 15, 20);
-  doc.rect(0, 0, 297, 40, 'F');
+  // ── Encabezado limpio sin fondo negro ──
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(22);
-  doc.setTextColor(118, 47, 164);
-  doc.text('TRANSPORTES MELGAR', 14, 20);
-  doc.setFontSize(10);
-  doc.setTextColor(180, 180, 200);
-  doc.text('Historial de Viajes — Generado: ' + new Date().toLocaleString('es-MX'), 14, 30);
+  doc.setFontSize(18);
+  doc.setTextColor(30, 30, 30);
+  doc.text('TRANSPORTES MELGAR', 14, 18);
 
-  const totalI = reportes.reduce((s, r) => s + r.subtotalIngresos, 0);
-  const totalG = reportes.reduce((s, r) => s + r.subtotalGastos,   0);
-  doc.setTextColor(34,  197, 94);  doc.text('Ingresos: $' + totalI.toFixed(2), 180, 20);
-  doc.setTextColor(239, 68,  68);  doc.text('Gastos: $'   + totalG.toFixed(2), 180, 27);
-  doc.setTextColor(118, 47, 164);   doc.text('Utilidad: $' + (totalI - totalG).toFixed(2), 180, 34);
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(9);
+  doc.setTextColor(100, 100, 100);
+  doc.text('Historial de Viajes   |   Generado: ' + new Date().toLocaleString('es-MX'), 14, 26);
+
+  // Línea separadora
+  doc.setDrawColor(200, 200, 200);
+  doc.line(14, 30, 283, 30);
+
+  const totalI   = reportes.reduce((s, r) => s + r.subtotalIngresos, 0);
+  const totalG   = reportes.reduce((s, r) => s + r.subtotalGastos,   0);
+  const totalU   = totalI - totalG;
 
   doc.autoTable({
-    startY: 47,
+    startY: 35,
     head: [['Fecha', 'Cliente / Destino', 'Unidad', 'Chofer', 'Ingresos', 'Gastos', 'Utilidad']],
     body: reportes.map(r => [
-      fmtDate(r.fecha), r.cliente, r.unidadPlaca, r.choferNombre,
-      '$' + r.subtotalIngresos.toFixed(2), '$' + r.subtotalGastos.toFixed(2), '$' + r.utilidad.toFixed(2),
+      fmtDate(r.fecha),
+      r.cliente + (r.destino ? '\n' + r.destino : ''),
+      r.unidadModelo || r.unidadPlaca,
+      r.choferNombre,
+      '$' + r.subtotalIngresos.toFixed(2),
+      '$' + r.subtotalGastos.toFixed(2),
+      '$' + r.utilidad.toFixed(2),
     ]),
+    // Fila de totales al final
+    foot: [['', '', '', 'TOTALES', '$' + totalI.toFixed(2), '$' + totalG.toFixed(2), '$' + totalU.toFixed(2)]],
     theme: 'striped',
-    headStyles: { fillColor: [118, 47, 164], textColor: [20, 20, 20], fontStyle: 'bold' },
-    styles: { fontSize: 8.5, cellPadding: 3 },
-    alternateRowStyles: { fillColor: [240, 242, 247] },
-    didParseCell: data => {
-      if (data.section === 'body' && data.column.index === 6) {
-        const val = parseFloat(data.cell.raw.replace('$', '').replace(',', ''));
-        data.cell.styles.textColor = val >= 0 ? [22, 160, 67] : [200, 30, 30];
-        data.cell.styles.fontStyle = 'bold';
-      }
+    headStyles: {
+      fillColor: [245, 245, 248],
+      textColor: [30, 30, 30],
+      fontStyle: 'bold',
+      lineColor: [210, 210, 215],
+      lineWidth: 0.3,
     },
+    footStyles: {
+      fillColor: [245, 245, 248],
+      textColor: [30, 30, 30],
+      fontStyle: 'bold',
+      lineColor: [210, 210, 215],
+      lineWidth: 0.3,
+    },
+    styles: { fontSize: 8.5, cellPadding: 3, textColor: [30, 30, 30] },
+    alternateRowStyles: { fillColor: [250, 250, 252] },
+    columnStyles: {
+      4: { halign: 'right' },
+      5: { halign: 'right' },
+      6: { halign: 'right', fontStyle: 'bold' },
+    },
+    showFoot: 'lastPage',
   });
 
   doc.save('historial-melgar-' + new Date().toISOString().split('T')[0] + '.pdf');
@@ -2419,6 +3219,11 @@ _fbReady.then(async () => {
       document.getElementById('login-btn').innerHTML = 'Iniciar Sesión';
     }
   }
+}).catch(err => {
+  console.error('Error Firebase:', err);
+  // Mostrar pantalla de login aunque Firebase falle — admin hardcodeado sigue funcionando
+  document.getElementById('login-screen').style.display = 'flex';
+  toast('Advertencia: problema de conexión con la base de datos.', 'warning');
 });
 
 </script>
