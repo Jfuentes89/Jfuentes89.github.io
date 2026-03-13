@@ -1801,6 +1801,12 @@ function subscribeAll() {
     const pg = document.querySelector('.page.active');
     if (pg && pg.id === 'page-agenda')    renderAgenda();
     if (pg && pg.id === 'page-dashboard') renderDashboard();
+    // Si el chofer tiene el dashboard activo, siempre actualizar sus tarjetas de viajes
+    const sesionActual = DB.sesion;
+    if (sesionActual && sesionActual.rol === 'chofer') {
+      const container = document.getElementById('viajes-asignados-container');
+      if (container) container.innerHTML = renderViajesChofer(sesionActual);
+    }
   });
 }
 
@@ -2133,6 +2139,12 @@ function renderDashboard() {
     .sort((a, b) => new Date(b.fecha) - new Date(a.fecha))
     .slice(0, 5);
 
+  // Siempre actualizar tarjetas de viajes asignados para el chofer
+  if (esChofer) {
+    const viajesContainer = document.getElementById('viajes-asignados-container');
+    if (viajesContainer) viajesContainer.innerHTML = renderViajesChofer(sesion);
+  }
+
   const al = document.getElementById('activity-list');
   if (!recientes.length) {
     al.innerHTML = '<div class="empty-state"><p>Sin actividad registrada este mes.</p></div>';
@@ -2140,12 +2152,6 @@ function renderDashboard() {
   }
 
   if (esChofer) {
-    // Insertar tarjetas de viajes asignados ANTES de la actividad
-    const viajesHtml = renderViajesChofer(sesion);
-    if (viajesHtml) {
-      const viajesContainer = document.getElementById('viajes-asignados-container');
-      if (viajesContainer) viajesContainer.innerHTML = viajesHtml;
-    }
     al.innerHTML = recientes.map(r => `
       <div class="activity-item" onclick="showDetalle('${r.id}')">
         <div class="activity-badge" style="background:var(--success)"></div>
@@ -2207,7 +2213,7 @@ function initForm() {
   const gp = document.getElementById('g-pago-chofer'); if (gp) gp.value = '';
   document.getElementById('r-cliente').value          = '';
   document.getElementById('r-destino').value          = '';
-  document.getElementById('r-entregado').value        = '';
+  const rEnt = document.getElementById('r-entregado'); if (rEnt) rEnt.value = '';
   calcLive();
 }
 
@@ -2830,7 +2836,9 @@ async function _actualizarEstadoViaje(id, estado) {
 
 function renderViajesChofer(sesion) {
   // Retorna HTML de tarjetas de viajes asignados al chofer
-  const viajes = DB.agenda.filter(v => v.chorerId === sesion.id && v.estado !== 'completado');
+  // Comparación estricta como string para evitar problemas de tipo
+  const sid = String(sesion.id);
+  const viajes = DB.agenda.filter(v => String(v.chorerId) === sid && v.estado !== 'completado');
   // La tarjeta permanece visible mientras no se guarde el reporte (estado en-ruta)
   if (!viajes.length) return '';
 
