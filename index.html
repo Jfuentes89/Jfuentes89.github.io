@@ -1983,6 +1983,3508 @@ function toggleTheme() {
 // ══════════════════════════════════════════════
 //  DASHBOARD
 // ══════════════════════════════════════════════
+// Fecha local en formato YYYY-MM-DD sin desfase de timezone
+function localDateStr(offsetDays = 0) {
+  const d = new Date();
+  d.setDate(d.getDate() + offsetDays);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+function renderDashboard() {
+  const sesion = DB.sesion;
+  const esChofer = sesion.rol === 'chofer';
+
+  // Filtrar al mes actual
+  const ahora  = new Date();
+  const mesAct = ahora.getMonth();      // 0-11
+  const anioAct = ahora.getFullYear();
+
+  let todosReportes = DB.reportes;
+  if (esChofer) todosReportes = todosReportes.filter(r => r.chorerId === sesion.id);
+
+  // Reportes del mes actual
+  const reportesMes = todosReportes.filter(r => {
+    if (!r.fecha) return false;
+    const [y, m] = r.fecha.split('-').map(Number);
+    return y === anioAct && (m - 1) === mesAct;
+  });
+
+  const nombreMes = ahora.toLocaleDateString('es-MX', { month: 'long', year: 'numeric' });
+
+  // Saludo
+  const h = ahora.getHours();
+  document.getElementById('dash-greeting').textContent =
+    (h < 12 ? 'Buenos días' : h < 18 ? 'Buenas tardes' : 'Buenas noches') + ', ' + sesion.nombre;
+  document.getElementById('dash-date').textContent =
+    ahora.toLocaleDateString('es-MX', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+
+  if (esChofer) {
+    // ── VISTA CHOFER: solo total de pagos recibidos (flete + ingresos extra) del mes ──
+    // Sumar solo los gastos con concepto "Pago de chófer"
+    const totalPagoChofer = reportesMes.reduce((s, r) => {
+      const g = (r.gastos || []).find(x => x.concepto && x.concepto.toLowerCase().includes('pago de ch'));
+      return s + (g ? g.monto : 0);
+    }, 0);
+    const numViajes  = reportesMes.length;
+
+    document.getElementById('metrics-grid').innerHTML = `
+      <div class="metric-card income">
+        <div class="metric-label">Pago de chófer — ${nombreMes}</div>
+        <div class="metric-value">${fmt(totalPagoChofer)}</div>
+        <div class="metric-sub">${numViajes} viaje${numViajes !== 1 ? 's' : ''} este mes</div>
+      </div>
+      <div class="metric-card trips">
+        <div class="metric-label">Viajes este mes</div>
+        <div class="metric-value">${numViajes}</div>
+        <div class="metric-sub">${todosReportes.length} en total histórico</div>
+      </div>
+    `;
+
+    // Ocultar barra de rentabilidad para chofer
+    const barWrap = document.querySelector('.profit-bar-wrap');
+    if (barWrap) barWrap.style.display = 'none';
+
+  } else {
+    // ── VISTA ADMIN: ingresos, gastos, utilidad y viajes del mes ──
+    const totalI   = reportesMes.reduce((s, r) => s + r.subtotalIngresos, 0);
+    const totalG   = reportesMes.reduce((s, r) => s + r.subtotalGastos,   0);
+    const utilidad = totalI - totalG;
+    const pct      = totalI > 0 ? Math.min(100, Math.round((utilidad / totalI) * 100)) : 0;
+    const numViajes = reportesMes.length;
+
+    document.getElementById('metrics-grid').innerHTML = `
+      <div class="metric-card income">
+        <div class="metric-label">Ingresos — ${nombreMes}</div>
+        <div class="metric-value">${fmt(totalI)}</div>
+        <div class="metric-sub">${numViajes} viaje${numViajes !== 1 ? 's' : ''} este mes</div>
+      </div>
+      <div class="metric-card expense">
+        <div class="metric-label">Gastos — ${nombreMes}</div>
+        <div class="metric-value">${fmt(totalG)}</div>
+        <div class="metric-sub">acumulados del mes</div>
+      </div>
+      <div class="metric-card profit">
+        <div class="metric-label">Utilidad Neta — ${nombreMes}</div>
+        <div class="metric-value">${fmt(utilidad)}</div>
+        <div class="metric-sub">${pct}% de rentabilidad</div>
+      </div>
+      <div class="metric-card trips">
+        <div class="metric-label">Viajes este mes</div>
+        <div class="metric-value">${numViajes}</div>
+        <div class="metric-sub">${todosReportes.length} en total histórico</div>
+      </div>
+    `;
+
+    const bar   = document.getElementById('profit-bar');
+    const pctEl = document.getElementById('profit-pct');
+    const barWrap = document.querySelector('.profit-bar-wrap');
+    if (barWrap) barWrap.style.display = '';
+    bar.style.width      = (pct < 0 ? 0 : pct) + '%';
+    bar.style.background = pct < 0
+      ? 'linear-gradient(90deg,#ef4444,#fca5a5)'
+      : 'linear-gradient(90deg,#36B25F,#57D5D5)';
+    pctEl.textContent = pct + '%';
+
+    // ── Resumen agenda del día ──
+    const hoy = localDateStr();
+    const agendaHoy = DB.agenda.filter(v => v.fecha === hoy);
+    const numAceptados       = agendaHoy.filter(v => v.estado === 'aceptado').length;
+    const numEnRuta          = agendaHoy.filter(v => v.estado === 'en-ruta').length;
+    const numPendReporte     = agendaHoy.filter(v => v.estado === 'pendiente-reporte').length;
+    const numCompletados     = agendaHoy.filter(v => v.estado === 'completado').length;
+    const numPendientes      = agendaHoy.filter(v => v.estado === 'pendiente').length;
+    const resumenEl = document.getElementById('admin-agenda-resumen');
+    if (resumenEl && agendaHoy.length > 0) {
+      resumenEl.innerHTML = `
+        <div style="font-size:.75rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:.5rem;font-weight:600">Agenda de hoy</div>
+        <div class="agenda-resumen">
+          <div class="agenda-resumen-item">
+            <span class="ar-num" style="color:var(--warning)">${numPendientes}</span>
+            <span class="ar-label">Pendientes</span>
+          </div>
+          <div class="agenda-resumen-item">
+            <span class="ar-num" style="color:#57D5D5">${numAceptados}</span>
+            <span class="ar-label">Aceptados</span>
+          </div>
+          <div class="agenda-resumen-item">
+            <span class="ar-num" style="color:#9D5DD9">${numEnRuta}</span>
+            <span class="ar-label">En Ruta</span>
+          </div>
+          <div class="agenda-resumen-item">
+            <span class="ar-num" style="color:#f59e0b">${numPendReporte}</span>
+            <span class="ar-label">Sin Reporte</span>
+          </div>
+          <div class="agenda-resumen-item">
+            <span class="ar-num" style="color:#36B25F">${numCompletados}</span>
+            <span class="ar-label">Completados</span>
+          </div>
+        </div>`;
+    } else if (resumenEl) {
+      resumenEl.innerHTML = '';
+    }
+  }
+
+  // ── Actividad reciente (últimos 5 del mes para ambos roles) ──
+  const recientes = [...reportesMes]
+    .sort((a, b) => new Date(b.fecha) - new Date(a.fecha))
+    .slice(0, 5);
+
+  const al = document.getElementById('activity-list');
+  if (!recientes.length) {
+    al.innerHTML = '<div class="empty-state"><p>Sin actividad registrada este mes.</p></div>';
+    return;
+  }
+
+  if (esChofer) {
+    // Insertar tarjetas de viajes asignados ANTES de la actividad
+    const viajesHtml = renderViajesChofer(sesion);
+    if (viajesHtml) {
+      const viajesContainer = document.getElementById('viajes-asignados-container');
+      if (viajesContainer) viajesContainer.innerHTML = viajesHtml;
+    }
+    al.innerHTML = recientes.map(r => `
+      <div class="activity-item" onclick="showDetalle('${r.id}')">
+        <div class="activity-badge" style="background:var(--success)"></div>
+        <div class="activity-info">
+          <strong>${r.cliente || 'Sin cliente'} — ${r.destino || ''}</strong>
+          <span>${fmtDate(r.fecha)} · ${r.unidadPlaca}</span>
+        </div>
+        <div class="activity-amount positive">${fmt(r.subtotalIngresos)}</div>
+      </div>`).join('');
+  } else {
+    al.innerHTML = recientes.map(r => {
+      const pos = r.utilidad >= 0;
+      return `<div class="activity-item" onclick="showDetalle('${r.id}')">
+        <div class="activity-badge" style="background:${pos ? 'var(--success)' : 'var(--danger)'}"></div>
+        <div class="activity-info">
+          <strong>${r.cliente || 'Sin cliente'} — ${r.destino || ''}</strong>
+          <span>${fmtDate(r.fecha)} · ${r.unidadPlaca} · ${r.choferNombre}</span>
+        </div>
+        <div class="activity-amount ${pos ? 'positive' : 'negative'}">${fmt(r.utilidad)}</div>
+      </div>`;
+    }).join('');
+  }
+}
+
+// ══════════════════════════════════════════════
+//  FORMULARIO — NUEVO REPORTE
+// ══════════════════════════════════════════════
+function initForm() {
+  const sesion   = DB.sesion;
+  const choferes = DB.choferes;
+  const unidades = DB.unidades;
+
+  document.getElementById('r-fecha').value = localDateStr();
+
+  // Chofer selector
+  const cSel  = document.getElementById('r-chofer');
+  const cGrp  = document.getElementById('r-chofer-group');
+  if (sesion.rol === 'chofer') {
+    cSel.innerHTML = `<option value="${sesion.id}">${sesion.nombre}</option>`;
+    cSel.disabled  = true;
+    cGrp.style.opacity = '.6';
+  } else {
+    cSel.disabled  = false;
+    cGrp.style.opacity = '1';
+    cSel.innerHTML = choferes.map(c => `<option value="${c.id}">${c.nombre}</option>`).join('');
+  }
+
+  // Unidades selector
+  const uSel = document.getElementById('r-unidad');
+  uSel.innerHTML = unidades.length
+    ? unidades.map(u => `<option value="${u.id}">${u.modelo} (${u.placa})</option>`).join('')
+    : '<option value="">Sin unidades registradas</option>';
+
+  // Limpiar dinámicos
+  document.getElementById('ingresos-extra').innerHTML = '';
+  document.getElementById('gastos-list').innerHTML    = '';
+  document.getElementById('r-flete').value            = '';
+  const gd = document.getElementById('g-diesel');      if (gd) gd.value = '';
+  const gp = document.getElementById('g-pago-chofer'); if (gp) gp.value = '';
+  document.getElementById('r-cliente').value          = '';
+  document.getElementById('r-destino').value          = '';
+  document.getElementById('r-entregado').value        = '';
+  calcLive();
+}
+
+/** Crea un input dinámico de ingreso extra */
+function addIngreso() {
+  const c = document.createElement('div');
+  c.className = 'dynamic-item with-label';
+  c.innerHTML = `
+    <input type="text"   placeholder="Concepto" style="${inputStyle()}" oninput="calcLive()">
+    <input type="number" placeholder="Monto" min="0" step="0.01" style="${inputStyle()}" oninput="calcLive()">
+    <button class="remove-item-btn" onclick="this.parentElement.remove();calcLive()">✕</button>`;
+  document.getElementById('ingresos-extra').appendChild(c);
+}
+
+/** Crea un input dinámico de gasto */
+function addGasto(concepto) {
+  const c = document.createElement('div');
+  c.className = 'dynamic-item with-label';
+  c.innerHTML = `
+    <input type="text"   value="${concepto}" placeholder="Concepto" style="${inputStyle()}" oninput="calcLive()">
+    <input type="number" placeholder="Monto" min="0" step="0.01" style="${inputStyle()}" oninput="calcLive()">
+    <button class="remove-item-btn" onclick="this.parentElement.remove();calcLive()">✕</button>`;
+  document.getElementById('gastos-list').appendChild(c);
+}
+
+/** Estilo inline compartido para inputs dinámicos */
+function inputStyle() {
+  return 'padding:.65rem .9rem;background:rgba(255,255,255,0.05);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text-primary);font-family:var(--font-body);font-size:.88rem;width:100%';
+}
+
+/** Cálculo en vivo de totales */
+function calcLive() {
+  const flete = parseFloat(document.getElementById('r-flete').value) || 0;
+  let ingresos = flete;
+  document.querySelectorAll('#ingresos-extra .dynamic-item').forEach(row => {
+    const inp = row.querySelectorAll('input[type=number]');
+    if (inp.length) ingresos += parseFloat(inp[0].value) || 0;
+  });
+  let gastos = 0;
+  gastos += parseFloat(document.getElementById('g-diesel')?.value) || 0;
+  gastos += parseFloat(document.getElementById('g-pago-chofer')?.value) || 0;
+  document.querySelectorAll('#gastos-list .dynamic-item').forEach(row => {
+    const inp = row.querySelectorAll('input[type=number]');
+    if (inp.length) gastos += parseFloat(inp[0].value) || 0;
+  });
+
+  const utilidad = ingresos - gastos;
+  document.getElementById('calc-ingresos').textContent = fmt(ingresos);
+  document.getElementById('calc-gastos').textContent   = fmt(gastos);
+  const uEl = document.getElementById('calc-utilidad');
+  uEl.textContent = fmt(utilidad);
+  uEl.className   = utilidad >= 0 ? 'positive' : 'negative';
+}
+
+function resetForm() {
+  const viajeId = window._viajeAgendaIdPendiente;
+  window._viajeAgendaIdPendiente = null;
+
+  if (viajeId) {
+    // Venía de finalizar un viaje: solo limpiar campos editables por el chofer
+    const diesel = document.getElementById('g-diesel');       if (diesel) diesel.value = '';
+    const entregado = document.getElementById('r-entregado'); if (entregado) entregado.value = '';
+    document.getElementById('gastos-list').innerHTML = '';
+    // Desbloquear campos que se bloquearon
+    ['r-fecha','r-cliente','r-destino','r-flete','g-pago-chofer'].forEach(fid => {
+      const el = document.getElementById(fid); if (el) el.readOnly = false;
+    });
+    const uSel = document.getElementById('r-unidad'); if (uSel) uSel.disabled = false;
+    const cSel = document.getElementById('r-chofer'); if (cSel) cSel.disabled = false;
+    // Restaurar botón guardar
+    const btn = document.querySelector('button[onclick="saveReporte()"]');
+    if (btn) {
+      btn.innerHTML = '<svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg> Guardar Reporte';
+      btn.style.background = '';
+      btn.style.border = '';
+    }
+    calcLive();
+  } else {
+    // Limpiar completo (uso normal por admin o chofer sin viaje asignado)
+    ['r-fecha','r-cliente','r-destino','r-flete','g-pago-chofer'].forEach(fid => {
+      const el = document.getElementById(fid); if (el) el.readOnly = false;
+    });
+    const uSel = document.getElementById('r-unidad'); if (uSel) uSel.disabled = false;
+    const cSel = document.getElementById('r-chofer'); if (cSel) cSel.disabled = false;
+    const btn = document.querySelector('button[onclick="saveReporte()"]');
+    if (btn) {
+      btn.innerHTML = '<svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg> Guardar Reporte';
+      btn.style.background = '';
+      btn.style.border = '';
+    }
+    initForm();
+  }
+}
+
+async function saveReporte() {
+  const sesion   = DB.sesion;
+  const fecha    = document.getElementById('r-fecha').value;
+  const chorerId = document.getElementById('r-chofer').value;
+  const unidadId = document.getElementById('r-unidad').value;
+  const cliente  = document.getElementById('r-cliente').value.trim();
+  const destino    = document.getElementById('r-destino').value.trim();
+  const entregadoA = document.getElementById('r-entregado').value.trim();
+  const flete    = parseFloat(document.getElementById('r-flete').value) || 0;
+
+  if (!fecha)     { toast('Selecciona la fecha del viaje', 'warning'); return; }
+  if (!unidadId)  { toast('Selecciona una unidad', 'warning'); return; }
+  if (!cliente)   { toast('Ingresa el cliente', 'warning'); return; }
+  if (!destino)   { toast('Ingresa el destino', 'warning'); return; }
+  if (flete <= 0) { toast('El precio de viaje debe ser mayor a $0', 'warning'); return; }
+
+  const chofer = DB.choferes.find(c => c.id === chorerId) || DB.choferes.find(c => c.id === sesion.id);
+  const unidad = DB.unidades.find(u => u.id === unidadId);
+
+  // Recopilar ingresos extra
+  const ingresosExtra = [];
+  document.querySelectorAll('#ingresos-extra .dynamic-item').forEach(row => {
+    const ins     = row.querySelectorAll('input');
+    const concepto = ins[0]?.value?.trim();
+    const monto    = parseFloat(ins[1]?.value) || 0;
+    if (concepto && monto > 0) ingresosExtra.push({ concepto, monto });
+  });
+
+  // Recopilar gastos (campos fijos + dinámicos)
+  const gastos = [];
+  const _diesel     = parseFloat(document.getElementById('g-diesel')?.value) || 0;
+  const _pagoChofer = parseFloat(document.getElementById('g-pago-chofer')?.value) || 0;
+  if (_diesel > 0)     gastos.push({ concepto: 'Diesel',          monto: _diesel });
+  if (_pagoChofer > 0) gastos.push({ concepto: 'Pago de chófer',  monto: _pagoChofer });
+  document.querySelectorAll('#gastos-list .dynamic-item').forEach(row => {
+    const ins      = row.querySelectorAll('input');
+    const concepto = ins[0]?.value?.trim();
+    const monto    = parseFloat(ins[1]?.value) || 0;
+    if (concepto && monto > 0) gastos.push({ concepto, monto });
+  });
+
+  const subtotalIngresos = flete + ingresosExtra.reduce((s, i) => s + i.monto, 0);
+  const subtotalGastos   = gastos.reduce((s, g) => s + g.monto, 0);
+  const utilidad         = subtotalIngresos - subtotalGastos;
+
+  const reporte = {
+    id: uid(),
+    fecha,
+    chorerId:     chofer?.id,
+    choferNombre: chofer?.nombre || 'N/D',
+    unidadId:     unidad?.id,
+    unidadPlaca:  unidad?.placa   || 'N/D',
+    unidadModelo: unidad?.modelo  || '',
+    cliente,
+    destino,
+    entregadoA,
+    flete,
+    ingresosExtra,
+    gastos,
+    subtotalIngresos,
+    subtotalGastos,
+    utilidad,
+    creadoEn: new Date().toISOString(),
+  };
+
+  try {
+    await fsSet('reportes', reporte.id, reporte);
+    // Si hay un viaje agendado vinculado, marcarlo como completado
+    if (window._viajeAgendaIdPendiente) {
+      await _actualizarEstadoViaje(window._viajeAgendaIdPendiente, 'completado');
+      window._viajeAgendaIdPendiente = null;
+      toast('Viaje finalizado y reporte guardado ✓', 'success');
+      resetForm();
+      navigate('dashboard');  // volver al dashboard para que vea la tarjeta desaparecer
+    } else {
+      toast('Reporte guardado correctamente ✓', 'success');
+      resetForm();
+      navigate('historial');
+    }
+  } catch(e) {
+    console.error(e);
+    toast('Error al guardar. Verifica tu conexión.', 'error');
+  }
+}
+
+// ══════════════════════════════════════════════
+//  HISTORIAL
+// ══════════════════════════════════════════════
+function renderHistorial() {
+  const sesion = DB.sesion;
+  let reportes = DB.reportes;
+  if (sesion.rol === 'chofer') reportes = reportes.filter(r => r.chorerId === sesion.id);
+
+  // Poblar filtros preservando selección actual
+  const fu   = document.getElementById('f-unidad');
+  const fc   = document.getElementById('f-chofer');
+  const prevU = fu.value, prevC = fc.value;
+  fu.innerHTML = '<option value="">Todas las unidades</option>' +
+    DB.unidades.map(u => `<option value="${u.id}">${u.modelo} (${u.placa})</option>`).join('');
+  fc.innerHTML = '<option value="">Todos los choferes</option>' +
+    DB.choferes.map(c => `<option value="${c.id}">${c.nombre}</option>`).join('');
+  fu.value = prevU; fc.value = prevC;
+
+  // Aplicar filtros
+  const desde = document.getElementById('f-desde').value;
+  const hasta = document.getElementById('f-hasta').value;
+
+  const filtrados = reportes.filter(r => {
+    if (desde && r.fecha < desde)    return false;
+    if (hasta && r.fecha > hasta)    return false;
+    if (fu.value && r.unidadId !== fu.value) return false;
+    if (fc.value && r.chorerId !== fc.value) return false;
+    return true;
+  }).sort((a, b) => new Date(b.fecha) - new Date(a.fecha));
+
+  const tbody = document.getElementById('historial-tbody');
+
+  if (!filtrados.length) {
+    tbody.innerHTML = '<div class="empty-state" style="padding:2rem 0"><p>Sin registros encontrados.</p></div>';
+    return;
+  }
+
+  tbody.innerHTML = filtrados.map(r => {
+    const pos = r.utilidad >= 0;
+    return `
+    <div class="activity-item" style="cursor:default">
+      <div class="activity-badge" style="background:${pos ? 'var(--success)' : 'var(--danger)'}"></div>
+      <div class="activity-info" style="flex:1;min-width:0">
+        <strong>${r.cliente || 'Sin cliente'} — ${r.destino || ''}</strong>
+        <span>${fmtDate(r.fecha)} · ${r.unidadModelo || r.unidadPlaca} · ${r.choferNombre}</span>
+      </div>
+      <div style="display:flex;flex-direction:column;align-items:flex-end;gap:.35rem;flex-shrink:0">
+        <span class="activity-amount ${pos ? 'positive' : 'negative'}">${fmt(r.utilidad)}</span>
+        <div style="display:flex;gap:.35rem">
+          <button class="btn btn-secondary btn-sm" onclick="showDetalle('${r.id}')">Ver</button>
+          ${sesion.rol !== 'chofer' ? `<button class="btn btn-danger btn-sm" onclick="confirmDelete('${r.id}')">✕</button>` : ''}
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function clearFilters() {
+  document.getElementById('f-desde').value  = '';
+  document.getElementById('f-hasta').value  = '';
+  document.getElementById('f-unidad').value = '';
+  document.getElementById('f-chofer').value = '';
+  renderHistorial();
+}
+
+function confirmDelete(id) {
+  openModal('modal-confirm');
+  document.getElementById('confirm-msg').textContent =
+    '¿Estás seguro de que deseas eliminar este reporte? Esta acción no se puede deshacer.';
+  document.getElementById('confirm-ok-btn').onclick = async () => {
+    try {
+      await fsDelete('reportes', id);
+      closeModal('modal-confirm');
+      toast('Reporte eliminado', 'info');
+    } catch(e) {
+      toast('Error al eliminar', 'error');
+    }
+  };
+}
+
+// ══════════════════════════════════════════════
+//  MODAL DETALLE
+// ══════════════════════════════════════════════
+function showDetalle(id) {
+  const r = DB.reportes.find(x => x.id === id);
+  if (!r) return;
+
+  const ingrosExtra = r.ingresosExtra || [];
+  const gastos      = r.gastos       || [];
+
+  document.getElementById('modal-detalle-body').innerHTML = `
+    <div class="detail-row"><span>Fecha</span><span>${fmtDate(r.fecha)}</span></div>
+    <div class="detail-row"><span>Cliente</span><span>${r.cliente}</span></div>
+    <div class="detail-row"><span>Destino</span><span>${r.destino || '—'}</span></div>
+    <div class="detail-row"><span>Entregado a</span><span>${r.entregadoA || '—'}</span></div>
+    <div class="detail-row"><span>Unidad</span><span>${r.unidadPlaca} — ${r.unidadModelo}</span></div>
+    <div class="detail-row"><span>Chofer</span><span>${r.choferNombre}</span></div>
+
+    <div class="detail-section-title">Ingresos</div>
+    <div class="detail-row"><span>Precio de viaje</span><span class="positive">${fmt(r.flete)}</span></div>
+    ${ingrosExtra.map(i => `<div class="detail-row"><span>${i.concepto}</span><span class="positive">${fmt(i.monto)}</span></div>`).join('')}
+    <div class="detail-row" style="border-top:1px solid var(--border-accent)">
+      <span><strong>Subtotal Ingresos</strong></span>
+      <span class="positive"><strong>${fmt(r.subtotalIngresos)}</strong></span>
+    </div>
+
+    <div class="detail-section-title">Gastos</div>
+    ${gastos.length
+      ? gastos.map(g => `<div class="detail-row"><span>${g.concepto}</span><span class="negative">${fmt(g.monto)}</span></div>`).join('')
+      : '<div style="color:var(--text-muted);font-size:.85rem;padding:.5rem 0">Sin gastos registrados</div>'}
+    <div class="detail-row" style="border-top:1px solid var(--border-accent)">
+      <span><strong>Subtotal Gastos</strong></span>
+      <span class="negative"><strong>${fmt(r.subtotalGastos)}</strong></span>
+    </div>
+
+    <div class="detail-row" style="border-top:2px solid var(--accent);margin-top:.5rem;padding-top:.75rem">
+      <span style="font-size:1rem"><strong>UTILIDAD NETA</strong></span>
+      <span style="font-family:var(--font-title);font-size:1.4rem" class="${r.utilidad >= 0 ? 'positive' : 'negative'}">
+        <strong>${fmt(r.utilidad)}</strong>
+      </span>
+    </div>`;
+
+  document.getElementById('modal-share-btn').onclick = () => shareWhatsApp(id);
+  if (DB.sesion.rol === 'chofer') {
+    document.getElementById('modal-edit-btn').onclick = () => openEditReporteChofer(id);
+  } else {
+    document.getElementById('modal-edit-btn').onclick = () => openEditReporte(id);
+  }
+  openModal('modal-detalle');
+}
+
+// ══════════════════════════════════════════════
+//  ADMINISTRACIÓN
+// ══════════════════════════════════════════════
+// ══════════════════════════════════════════════
+//  AGENDA DE VIAJES
+// ══════════════════════════════════════════════
+
+function _buildAgendaCard(v) {
+  const estadoBadge = {
+    'sin-chofer': 'Sin Asignar', pendiente: 'Pendiente',
+    aceptado: 'Aceptado', 'en-ruta': 'En Ruta', completado: 'Completado'
+  };
+  const chofer = DB.choferes.find(c => c.id === v.chorerId);
+  const unidad = DB.unidades.find(u => u.id === v.unidadId);
+  const estado = !v.chorerId ? 'sin-chofer' : (v.estado || 'pendiente');
+  const btnAsignar = !v.chorerId
+    ? `<button class="btn btn-primary btn-sm" onclick="openAsignarChofer('${v.id}')">
+         <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+         Asignar Chofer
+       </button>`
+    : '';
+  return `
+  <div class="agenda-card">
+    <div class="agenda-card-header">
+      <div class="agenda-card-title">${v.cliente} → ${v.destino}</div>
+      <span class="agenda-badge ${estado}">${estadoBadge[estado] || estado}</span>
+    </div>
+    <div class="agenda-card-info">
+      <div class="agenda-info-item"><label>Fecha</label><span>${fmtDate(v.fecha)}</span></div>
+      <div class="agenda-info-item"><label>Hora salida</label><span>${v.hora || '—'}</span></div>
+      <div class="agenda-info-item"><label>Chofer</label><span>${chofer ? chofer.nombre : '⚠ Sin asignar'}</span></div>
+      <div class="agenda-info-item"><label>Unidad</label><span>${unidad ? unidad.modelo + ' (' + unidad.placa + ')' : '—'}</span></div>
+      <div class="agenda-info-item"><label>Precio</label><span style="color:var(--success)">${fmt(v.flete)}</span></div>
+    </div>
+    <div class="agenda-card-actions">
+      ${btnAsignar}
+      <button class="btn btn-secondary btn-sm" onclick="openEditViajeAgenda('${v.id}')">
+        <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+        Editar
+      </button>
+      <button class="btn btn-danger btn-sm" onclick="deleteViajeAgenda('${v.id}')">Eliminar</button>
+    </div>
+  </div>`;
+}
+
+function _renderAgendaSection(containerId, viajes, titulo, accentStyle) {
+  const el = document.getElementById(containerId);
+  if (!el) return;
+  if (!viajes.length) { el.innerHTML = ''; return; }
+  el.innerHTML = `
+    <div style="margin-bottom:.75rem">
+      <span style="font-family:var(--font-title);font-size:1.1rem;letter-spacing:1.5px;${accentStyle}">${titulo}</span>
+      <span style="font-size:.78rem;color:var(--text-muted);margin-left:.6rem">${viajes.length} viaje${viajes.length !== 1 ? 's' : ''}</span>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:1rem">
+      ${viajes.map(_buildAgendaCard).join('')}
+    </div>`;
+}
+
+function renderAgenda() {
+  if (!document.getElementById('agenda-sec-hoy')) return;
+
+  const lista = DB.agenda;
+  const hoy     = localDateStr(0);
+  const manana  = localDateStr(1);
+
+  const deHoy    = lista.filter(v => v.fecha === hoy).sort((a,b) => (a.hora||'').localeCompare(b.hora||''));
+  const deManana = lista.filter(v => v.fecha === manana).sort((a,b) => (a.hora||'').localeCompare(b.hora||''));
+  const resto    = lista.filter(v => v.fecha !== hoy && v.fecha !== manana).sort((a,b) => a.fecha.localeCompare(b.fecha));
+
+  if (!lista.length) {
+    document.getElementById('agenda-sec-hoy').innerHTML = '<div class="empty-state"><p>Sin viajes agendados.</p></div>';
+    document.getElementById('agenda-sec-manana').innerHTML = '';
+    document.getElementById('agenda-sec-resto').innerHTML = '';
+    return;
+  }
+
+  _renderAgendaSection('agenda-sec-hoy',    deHoy,    'VIAJES PARA HOY',     'color:#762FA4');
+  _renderAgendaSection('agenda-sec-manana', deManana, 'VIAJES PARA MAÑANA',  'color:#57D5D5');
+  _renderAgendaSection('agenda-sec-resto',  resto,    'PRÓXIMOS VIAJES',     'color:var(--text-muted)');
+
+  // Si no hay nada en hoy ni mañana pero sí en resto, mostrar empty solo en hoy
+  if (!deHoy.length && !deManana.length && !resto.length) {
+    document.getElementById('agenda-sec-hoy').innerHTML = '<div class="empty-state"><p>Sin viajes agendados.</p></div>';
+  } else if (!deHoy.length) {
+    document.getElementById('agenda-sec-hoy').innerHTML =
+      `<div style="margin-bottom:.75rem"><span style="font-family:var(--font-title);font-size:1.1rem;letter-spacing:1.5px;color:#762FA4">VIAJES PARA HOY</span></div>
+       <div class="empty-state" style="padding:1rem 0"><p>Sin viajes programados para hoy.</p></div>`;
+  }
+}
+
+function openModalAgenda() {
+  // Poblar selects de chofer y unidad
+  const choferes = DB.choferes.filter(c => c.id !== 'c0');
+  document.getElementById('av-chofer').innerHTML =
+    '<option value="">Sin asignar</option>' +
+    choferes.map(c => `<option value="${c.id}">${c.nombre}</option>`).join('');
+  document.getElementById('av-unidad').innerHTML =
+    '<option value="">Sin asignar</option>' +
+    DB.unidades.map(u => `<option value="${u.id}">${u.modelo} (${u.placa})</option>`).join('');
+  // Fecha por defecto hoy
+  document.getElementById('av-fecha').value = localDateStr();
+  openModal('modal-nuevo-viaje-agenda');
+}
+
+async function saveViajeAgenda() {
+  const fecha    = document.getElementById('av-fecha').value;
+  const hora     = document.getElementById('av-hora').value;
+  const cliente  = document.getElementById('av-cliente').value.trim();
+  const destino  = document.getElementById('av-destino').value.trim();
+  const flete    = parseFloat(document.getElementById('av-flete').value) || 0;
+  const chorerId = document.getElementById('av-chofer').value;
+  const unidadId = document.getElementById('av-unidad').value;
+
+  if (!fecha || !cliente || !destino || flete <= 0) {
+    toast('Completa fecha, cliente, destino y precio', 'warning'); return;
+  }
+
+  const pagoChofer = parseFloat(document.getElementById('av-pago-chofer').value) || 0;
+  const estado = chorerId ? 'pendiente' : 'sin-chofer';
+  const viaje = { id: uid(), fecha, hora, cliente, destino, flete, pagoChofer, chorerId, unidadId, estado, creadoEn: new Date().toISOString() };
+
+  try {
+    await fsSet('agenda', viaje.id, viaje);
+    // Limpiar
+    ['av-fecha','av-hora','av-cliente','av-destino','av-flete','av-pago-chofer'].forEach(id => document.getElementById(id).value = '');
+    document.getElementById('av-chofer').value = '';
+    document.getElementById('av-unidad').value = '';
+    closeModal('modal-nuevo-viaje-agenda');
+    toast('Viaje agendado correctamente', 'success');
+  } catch(e) { console.error(e); toast('Error al agendar', 'error'); }
+}
+
+function openEditViajeAgenda(id) {
+  const v = DB.agenda.find(x => x.id === id);
+  if (!v) return;
+  // Poblar selects
+  const choferes = DB.choferes.filter(c => c.id !== 'c0');
+  document.getElementById('ea-chofer').innerHTML =
+    '<option value="">Sin asignar</option>' +
+    choferes.map(c => `<option value="${c.id}"${v.chorerId === c.id ? ' selected' : ''}>${c.nombre}</option>`).join('');
+  document.getElementById('ea-unidad').innerHTML =
+    '<option value="">Sin asignar</option>' +
+    DB.unidades.map(u => `<option value="${u.id}"${v.unidadId === u.id ? ' selected' : ''}>${u.modelo} (${u.placa})</option>`).join('');
+  // Precargar datos
+  document.getElementById('ea-id').value      = v.id;
+  document.getElementById('ea-fecha').value   = v.fecha  || '';
+  document.getElementById('ea-hora').value    = v.hora   || '';
+  document.getElementById('ea-cliente').value = v.cliente || '';
+  document.getElementById('ea-destino').value = v.destino || '';
+  document.getElementById('ea-flete').value        = v.flete      || '';
+  document.getElementById('ea-pago-chofer').value  = v.pagoChofer || '';
+  openModal('modal-edit-viaje-agenda');
+}
+
+async function saveEditViajeAgenda() {
+  const id       = document.getElementById('ea-id').value;
+  const fecha    = document.getElementById('ea-fecha').value;
+  const hora     = document.getElementById('ea-hora').value;
+  const cliente  = document.getElementById('ea-cliente').value.trim();
+  const destino  = document.getElementById('ea-destino').value.trim();
+  const flete      = parseFloat(document.getElementById('ea-flete').value) || 0;
+  const pagoChofer = parseFloat(document.getElementById('ea-pago-chofer').value) || 0;
+  const chorerId   = document.getElementById('ea-chofer').value;
+  const unidadId   = document.getElementById('ea-unidad').value;
+
+  if (!fecha || !cliente || !destino || flete <= 0) {
+    toast('Completa fecha, cliente, destino y precio', 'warning'); return;
+  }
+
+  const agenda = [...DB.agenda];
+  const idx = agenda.findIndex(v => v.id === id);
+  if (idx === -1) { toast('Viaje no encontrado', 'error'); return; }
+
+  agenda[idx] = { ...agenda[idx], fecha, hora, cliente, destino, flete, pagoChofer, chorerId, unidadId };
+
+  try {
+    await fsSet('agenda', id, agenda[idx]);
+    _cache.agenda = agenda;
+    closeModal('modal-edit-viaje-agenda');
+    toast('Viaje actualizado correctamente', 'success');
+    renderAgenda();
+  } catch(e) { console.error(e); toast('Error al guardar', 'error'); }
+}
+
+function openAsignarChofer(id) {
+  const v = DB.agenda.find(x => x.id === id);
+  if (!v) return;
+  const choferes = DB.choferes.filter(c => c.id !== 'c0');
+  document.getElementById('ac-chofer').innerHTML =
+    '<option value="">Selecciona un chofer...</option>' +
+    choferes.map(c => `<option value="${c.id}">${c.nombre}</option>`).join('');
+  document.getElementById('ac-unidad').innerHTML =
+    '<option value="">Sin asignar</option>' +
+    DB.unidades.map(u => `<option value="${u.id}">${u.modelo} (${u.placa})</option>`).join('');
+  document.getElementById('ac-id').value = id;
+  openModal('modal-asignar-chofer');
+}
+
+async function saveAsignarChofer() {
+  const id       = document.getElementById('ac-id').value;
+  const chorerId = document.getElementById('ac-chofer').value;
+  const unidadId = document.getElementById('ac-unidad').value;
+
+  if (!chorerId) { toast('Selecciona un chofer', 'warning'); return; }
+
+  const agenda = [...DB.agenda];
+  const idx = agenda.findIndex(v => v.id === id);
+  if (idx === -1) { toast('Viaje no encontrado', 'error'); return; }
+
+  agenda[idx] = { ...agenda[idx], chorerId, unidadId, estado: 'pendiente' };
+
+  try {
+    await fsSet('agenda', id, agenda[idx]);
+    _cache.agenda = agenda;
+    closeModal('modal-asignar-chofer');
+    toast('Chofer asignado correctamente', 'success');
+    renderAgenda();
+  } catch(e) { console.error(e); toast('Error al asignar', 'error'); }
+}
+
+function deleteViajeAgenda(id) {
+  openModal('modal-confirm');
+  document.getElementById('confirm-msg').textContent = '¿Eliminar este viaje agendado?';
+  document.getElementById('confirm-ok-btn').onclick = async () => {
+    closeModal('modal-confirm');
+    try {
+      await fsDelete('agenda', id);
+      _cache.agenda = _cache.agenda.filter(v => v.id !== id);
+      toast('Viaje eliminado', 'info');
+      renderAgenda();
+    } catch(e) { toast('Error al eliminar', 'error'); }
+  };
+}
+
+async function choferAceptarViaje(id) {
+  await _actualizarEstadoViaje(id, 'aceptado');
+  toast('¡Viaje aceptado!', 'success');
+}
+
+async function choferIniciarViaje(id) {
+  await _actualizarEstadoViaje(id, 'en-ruta');
+  toast('¡Viaje iniciado! En ruta.', 'info');
+}
+
+async function choferFinalizarViaje(id) {
+  const viaje = DB.agenda.find(v => v.id === id);
+  if (!viaje) return;
+  // Guardar id para marcar completado al guardar el reporte
+  window._viajeAgendaIdPendiente = id;
+  navigate('nuevo-reporte');
+  setTimeout(() => {
+    const g = (sel) => document.getElementById(sel);
+    // Precargar datos del viaje
+    if (g('r-fecha'))   g('r-fecha').value   = viaje.fecha || localDateStr();
+    if (g('r-cliente')) g('r-cliente').value = viaje.cliente || '';
+    if (g('r-destino')) g('r-destino').value = viaje.destino || '';
+    if (g('r-flete'))   { g('r-flete').value = viaje.flete || ''; calcLive(); }
+    if (viaje.pagoChofer && g('g-pago-chofer')) { g('g-pago-chofer').value = viaje.pagoChofer; calcLive(); }
+    if (viaje.chorerId && g('r-chofer')) g('r-chofer').value = viaje.chorerId;
+    if (viaje.unidadId && g('r-unidad')) g('r-unidad').value = viaje.unidadId;
+    // Bloquear campos para que el chofer no los modifique
+    ['r-fecha','r-cliente','r-destino','r-flete'].forEach(fid => {
+      const el = g(fid); if (el) el.readOnly = true;
+    });
+    if (g('r-unidad'))     g('r-unidad').disabled = true;
+    if (g('r-chofer'))     g('r-chofer').disabled = true;
+    if (g('g-pago-chofer')) g('g-pago-chofer').readOnly = true;
+    // Cambiar botón a "Finalizar Viaje"
+    const btn = document.querySelector('button[onclick="saveReporte()"]');
+    if (btn) {
+      btn.innerHTML = '<svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/></svg> Finalizar Viaje';
+      btn.style.background = 'linear-gradient(135deg,#36B25F,#57D5D5)';
+      btn.style.border = 'none';
+    }
+  }, 300);
+}
+
+function reabrirReportePendiente(id) {
+  const viaje = DB.agenda.find(v => v.id === id);
+  if (!viaje) return;
+  window._viajeAgendaIdPendiente = id;
+  navigate('nuevo-reporte');
+  setTimeout(() => {
+    const el = (sel) => document.getElementById(sel);
+    if (el('r-fecha'))   el('r-fecha').value   = viaje.fecha || localDateStr();
+    if (el('r-cliente')) el('r-cliente').value  = viaje.cliente || '';
+    if (el('r-destino')) el('r-destino').value  = viaje.destino || '';
+    if (el('r-flete'))   { el('r-flete').value  = viaje.flete || ''; calcLive(); }
+    if (viaje.chorerId && el('r-chofer')) el('r-chofer').value = viaje.chorerId;
+    if (viaje.unidadId && el('r-unidad')) el('r-unidad').value = viaje.unidadId;
+  }, 300);
+}
+
+async function _actualizarEstadoViaje(id, estado) {
+  const agenda = [...DB.agenda];
+  const idx = agenda.findIndex(v => v.id === id);
+  if (idx === -1) return;
+  agenda[idx] = { ...agenda[idx], estado };
+  // Actualizar cache LOCAL de inmediato para que la UI refleje el cambio sin esperar Firestore
+  _cache.agenda = agenda;
+  // Refrescar contenedor de tarjetas del chofer si está visible
+  const sesion = DB.sesion;
+  const container = document.getElementById('viajes-asignados-container');
+  if (container && sesion) container.innerHTML = renderViajesChofer(sesion);
+  // Persistir en Firestore
+  await fsSet('agenda', id, agenda[idx]);
+}
+
+function renderViajesChofer(sesion) {
+  // Retorna HTML de tarjetas de viajes asignados al chofer
+  const viajes = DB.agenda.filter(v => v.chorerId === sesion.id && v.estado !== 'completado');
+  // La tarjeta permanece visible mientras no se guarde el reporte (estado en-ruta)
+  if (!viajes.length) return '';
+
+  const estadoLabel = { pendiente: 'Viaje Asignado', aceptado: 'Viaje Aceptado', 'en-ruta': 'En Ruta' };
+
+  return viajes.map(v => {
+    const unidad = DB.unidades.find(u => u.id === v.unidadId);
+    const estado = v.estado || 'pendiente';
+    let acciones = '';
+    if (estado === 'pendiente') {
+      acciones = `<button class="btn btn-primary" style="width:100%" onclick="choferAceptarViaje('${v.id}')">
+        <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>
+        Aceptar Viaje
+      </button>`;
+    } else if (estado === 'aceptado') {
+      acciones = `<button class="btn btn-primary" style="width:100%;background:linear-gradient(135deg,#57D5D5,#36B25F)" onclick="choferIniciarViaje('${v.id}')">
+        <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+        Iniciar Viaje
+      </button>`;
+    } else if (estado === 'en-ruta') {
+      acciones = `<button class="btn btn-danger" style="width:100%" onclick="choferFinalizarViaje('${v.id}')">
+        <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/></svg>
+        Finalizar Viaje
+      </button>`;
+    }
+    return `
+    <div class="viaje-asignado-card">
+      <h3>
+        <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>
+        </svg>
+        ${estadoLabel[estado] || 'Viaje'}
+      </h3>
+      <div class="agenda-card-info" style="margin-bottom:.85rem">
+        <div class="agenda-info-item"><label>Fecha</label><span>${fmtDate(v.fecha)}</span></div>
+        <div class="agenda-info-item"><label>Hora</label><span>${v.hora || '—'}</span></div>
+        <div class="agenda-info-item"><label>Cliente</label><span>${v.cliente}</span></div>
+        <div class="agenda-info-item"><label>Destino</label><span>${v.destino}</span></div>
+        <div class="agenda-info-item"><label>Precio</label><span style="color:var(--success)">${fmt(v.flete)}</span></div>
+        ${unidad ? `<div class="agenda-info-item"><label>Unidad</label><span>${unidad.modelo}</span></div>` : ''}
+      </div>
+      ${acciones}
+    </div>`;
+  }).join('');
+}
+
+function renderAdmin() {
+  const choferes = DB.choferes;
+  const unidades = DB.unidades;
+
+  document.getElementById('choferes-list').innerHTML = choferes.length
+    ? choferes.map(c => `
+      <div class="admin-list-item">
+        <div style="flex:1;min-width:0">
+          <span>${c.nombre}</span>
+          <div style="font-size:.72rem;color:var(--text-muted)">${c.username} · <span style="color:var(--accent);font-weight:600">${c.rol}</span></div>
+        </div>
+        <div style="display:flex;gap:.4rem;align-items:center">
+          ${c.id !== 'c0'
+            ? `<button class="btn btn-secondary btn-sm" onclick="openEditChofer('${c.id}')" title="Editar rol">
+                <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+              </button>
+              <button class="btn btn-danger btn-sm" onclick="deleteChofer('${c.id}')">✕</button>`
+            : '<span class="badge badge-warning">Admin</span>'}
+        </div>
+      </div>`).join('')
+    : '<p style="color:var(--text-muted);font-size:.85rem;text-align:center;padding:.75rem">Sin choferes</p>';
+
+  document.getElementById('unidades-list').innerHTML = unidades.length
+    ? unidades.map(u => `
+      <div class="admin-list-item">
+        <div style="flex:1;min-width:0">
+          <span>${u.modelo}</span>
+          <div style="font-size:.72rem;color:var(--text-muted)">${u.placa}</div>
+        </div>
+        <div style="display:flex;gap:.4rem">
+          <button class="btn btn-secondary btn-sm" onclick="openEditUnidad('${u.id}')" title="Editar unidad">
+            <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+          </button>
+          <button class="btn btn-danger btn-sm" onclick="deleteUnidad('${u.id}')">✕</button>
+        </div>
+      </div>`).join('')
+    : '<p style="color:var(--text-muted);font-size:.85rem;text-align:center;padding:.75rem">Sin unidades</p>';
+}
+
+async function addChofer() {
+  const nombre   = document.getElementById('new-chofer-nombre').value.trim();
+  const username = document.getElementById('new-chofer-user').value.trim();
+  const password = document.getElementById('new-chofer-pass').value;
+  const rol      = document.getElementById('new-chofer-rol').value;
+
+  if (!nombre || !username || !password) { toast('Completa todos los campos', 'warning'); return; }
+  const choferes = DB.choferes;
+  if (choferes.find(c => c.username === username)) { toast('Ese usuario ya existe', 'error'); return; }
+
+  const newId = uid();
+  const nuevoChofer = { id: newId, nombre, username, password, rol };
+  try {
+    await fsSet('choferes', newId, nuevoChofer);
+    closeModal('modal-nuevo-chofer');
+    document.getElementById('new-chofer-nombre').value = '';
+    document.getElementById('new-chofer-user').value   = '';
+    document.getElementById('new-chofer-pass').value   = '';
+    toast('Chofer agregado', 'success');
+  } catch(e) {
+    toast('Error al guardar chofer', 'error');
+  }
+}
+
+function openEditChofer(id) {
+  const c = DB.choferes.find(x => x.id === id);
+  if (!c) { toast('Usuario no encontrado', 'error'); return; }
+  document.getElementById('edit-chofer-id').value     = c.id;
+  document.getElementById('edit-chofer-nombre').value = c.nombre;
+  document.getElementById('edit-chofer-pass').value   = '';
+  document.getElementById('edit-chofer-rol').value    = c.rol;
+  openModal('modal-edit-chofer');
+}
+
+async function saveEditChofer() {
+  const id     = document.getElementById('edit-chofer-id').value;
+  const nombre = document.getElementById('edit-chofer-nombre').value.trim();
+  const pass   = document.getElementById('edit-chofer-pass').value;
+  const rol    = document.getElementById('edit-chofer-rol').value;
+
+  if (!nombre) { toast('El nombre no puede estar vacío', 'warning'); return; }
+
+  const choferes = [...DB.choferes];
+  const idx = choferes.findIndex(c => c.id === id);
+  if (idx === -1) { toast('Usuario no encontrado', 'error'); return; }
+
+  choferes[idx] = { ...choferes[idx], nombre, rol };
+  if (pass) choferes[idx].password = pass;
+
+  try {
+    await fsSet('choferes', id, choferes[idx]);
+    _cache.choferes = choferes;
+    closeModal('modal-edit-chofer');
+    toast(`${nombre} actualizado correctamente`, 'success');
+    renderAdmin();
+  } catch(e) {
+    console.error(e);
+    toast('Error al guardar cambios', 'error');
+  }
+}
+
+function deleteChofer(id) {
+  openModal('modal-confirm');
+  document.getElementById('confirm-msg').textContent = '¿Eliminar este chofer? Esta acción no se puede deshacer.';
+  document.getElementById('confirm-ok-btn').onclick = async () => {
+    try {
+      await fsDelete('choferes', id);
+      closeModal('modal-confirm');
+      toast('Chofer eliminado', 'info');
+    } catch(e) {
+      toast('Error al eliminar chofer', 'error');
+    }
+  };
+}
+
+async function addUnidad() {
+  const placa  = document.getElementById('new-unidad-placa').value.trim().toUpperCase();
+  const modelo = document.getElementById('new-unidad-modelo').value.trim();
+
+  if (!placa || !modelo) { toast('Completa placa y modelo', 'warning'); return; }
+  const unidades = DB.unidades;
+  if (unidades.find(u => u.placa === placa)) { toast('Esa placa ya existe', 'error'); return; }
+
+  const newId = uid();
+  const nuevaUnidad = { id: newId, placa, modelo };
+  try {
+    await fsSet('unidades', newId, nuevaUnidad);
+    document.getElementById('new-unidad-placa').value  = '';
+    document.getElementById('new-unidad-modelo').value = '';
+    closeModal('modal-nueva-unidad');
+    toast('Unidad agregada', 'success');
+  } catch(e) {
+    toast('Error al guardar unidad', 'error');
+  }
+}
+
+function openEditUnidad(id) {
+  const u = DB.unidades.find(x => x.id === id);
+  if (!u) return;
+  document.getElementById('edit-unidad-id').value    = u.id;
+  document.getElementById('edit-unidad-placa').value  = u.placa;
+  document.getElementById('edit-unidad-modelo').value = u.modelo;
+  openModal('modal-edit-unidad');
+}
+
+async function saveEditUnidad() {
+  const id     = document.getElementById('edit-unidad-id').value;
+  const placa  = document.getElementById('edit-unidad-placa').value.trim().toUpperCase();
+  const modelo = document.getElementById('edit-unidad-modelo').value.trim();
+  if (!placa || !modelo) { toast('Completa placa y modelo', 'warning'); return; }
+  const unidades = [...DB.unidades];
+  const idx = unidades.findIndex(u => u.id === id);
+  if (idx === -1) { toast('Unidad no encontrada', 'error'); return; }
+  unidades[idx] = { ...unidades[idx], placa, modelo };
+  try {
+    await fsSet('unidades', id, unidades[idx]);
+    _cache.unidades = unidades;
+    closeModal('modal-edit-unidad');
+    toast('Unidad actualizada correctamente', 'success');
+    renderAdmin();
+  } catch(e) { console.error(e); toast('Error al guardar', 'error'); }
+}
+
+function openEditReporteChofer(id) {
+  const r = DB.reportes.find(x => x.id === id);
+  if (!r) return;
+  document.getElementById('erc-id').value       = r.id;
+  document.getElementById('erc-entregado').value = r.entregadoA || '';
+  const diesel = (r.gastos || []).find(g => g.concepto === 'Diesel');
+  document.getElementById('erc-diesel').value = diesel ? diesel.monto : '';
+  // Cargar otros gastos (no Diesel, no Pago de chófer)
+  const otros = (r.gastos || []).filter(g => g.concepto !== 'Diesel' && g.concepto !== 'Pago de chófer');
+  const lista = document.getElementById('erc-gastos-list');
+  lista.innerHTML = '';
+  otros.forEach(g => {
+    const row = document.createElement('div');
+    row.className = 'dynamic-item with-label';
+    row.innerHTML = `<input type="text" value="${g.concepto}" placeholder="Concepto" style="${inputStyle()}">
+      <input type="number" value="${g.monto}" placeholder="Monto" min="0" step="0.01" style="${inputStyle()}">
+      <button class="remove-item-btn" onclick="this.parentElement.remove()">✕</button>`;
+    lista.appendChild(row);
+  });
+  closeModal('modal-detalle');
+  openModal('modal-edit-reporte-chofer');
+}
+
+function addGastoChoferEdit() {
+  const row = document.createElement('div');
+  row.className = 'dynamic-item with-label';
+  row.innerHTML = `<input type="text" placeholder="Concepto" style="${inputStyle()}">
+    <input type="number" placeholder="Monto" min="0" step="0.01" style="${inputStyle()}">
+    <button class="remove-item-btn" onclick="this.parentElement.remove()">✕</button>`;
+  document.getElementById('erc-gastos-list').appendChild(row);
+}
+
+async function saveEditReporteChofer() {
+  const id         = document.getElementById('erc-id').value;
+  const entregadoA = document.getElementById('erc-entregado').value.trim();
+  const diesel     = parseFloat(document.getElementById('erc-diesel').value) || 0;
+
+  const reportes = [...DB.reportes];
+  const idx = reportes.findIndex(r => r.id === id);
+  if (idx === -1) { toast('Reporte no encontrado', 'error'); return; }
+
+  const r = reportes[idx];
+  // Preservar Pago de chófer original
+  const pagoChofer = (r.gastos || []).find(g => g.concepto === 'Pago de chófer');
+  // Recopilar otros gastos del modal
+  const otrosGastos = [];
+  document.querySelectorAll('#erc-gastos-list .dynamic-item').forEach(row => {
+    const ins = row.querySelectorAll('input');
+    const concepto = ins[0]?.value?.trim();
+    const monto    = parseFloat(ins[1]?.value) || 0;
+    if (concepto && monto > 0) otrosGastos.push({ concepto, monto });
+  });
+  const gastos = [];
+  if (diesel > 0)    gastos.push({ concepto: 'Diesel',         monto: diesel });
+  if (pagoChofer)    gastos.push(pagoChofer);
+  gastos.push(...otrosGastos);
+
+  const subtotalGastos = gastos.reduce((s, g) => s + g.monto, 0);
+  const utilidad       = r.subtotalIngresos - subtotalGastos;
+
+  reportes[idx] = { ...r, entregadoA, gastos, subtotalGastos, utilidad };
+
+  try {
+    await fsSet('reportes', id, reportes[idx]);
+    _cache.reportes = reportes;
+    closeModal('modal-edit-reporte-chofer');
+    toast('Reporte actualizado correctamente', 'success');
+    const pg = document.querySelector('.page.active');
+    if (pg && pg.id === 'page-historial') renderHistorial();
+  } catch(e) { console.error(e); toast('Error al guardar', 'error'); }
+}
+
+function openEditReporte(id) {
+  const r = DB.reportes.find(x => x.id === id);
+  if (!r) return;
+  document.getElementById('er-id').value       = r.id;
+  document.getElementById('er-fecha').value    = r.fecha || '';
+  document.getElementById('er-cliente').value  = r.cliente || '';
+  document.getElementById('er-destino').value  = r.destino || '';
+  document.getElementById('er-entregado').value = r.entregadoA || '';
+  document.getElementById('er-flete').value    = r.flete || 0;
+  // gastos fijos
+  const diesel     = (r.gastos || []).find(g => g.concepto === 'Diesel');
+  const pagoChofer = (r.gastos || []).find(g => g.concepto === 'Pago de chófer');
+  document.getElementById('er-diesel').value      = diesel     ? diesel.monto     : '';
+  document.getElementById('er-pago-chofer').value = pagoChofer ? pagoChofer.monto : '';
+  closeModal('modal-detalle');
+  openModal('modal-edit-reporte');
+}
+
+async function saveEditReporte() {
+  const id         = document.getElementById('er-id').value;
+  const fecha      = document.getElementById('er-fecha').value;
+  const cliente    = document.getElementById('er-cliente').value.trim();
+  const destino    = document.getElementById('er-destino').value.trim();
+  const entregadoA = document.getElementById('er-entregado').value.trim();
+  const flete      = parseFloat(document.getElementById('er-flete').value) || 0;
+  const diesel     = parseFloat(document.getElementById('er-diesel').value) || 0;
+  const pagoChofer = parseFloat(document.getElementById('er-pago-chofer').value) || 0;
+
+  if (!fecha || !cliente || !destino || flete <= 0) {
+    toast('Completa los campos obligatorios', 'warning'); return;
+  }
+
+  const reportes = [...DB.reportes];
+  const idx = reportes.findIndex(r => r.id === id);
+  if (idx === -1) { toast('Reporte no encontrado', 'error'); return; }
+
+  // Reconstruir gastos: fijos + los "otros" que ya tenía
+  const otrosGastos = (reportes[idx].gastos || []).filter(g =>
+    g.concepto !== 'Diesel' && g.concepto !== 'Pago de chófer'
+  );
+  const gastos = [];
+  if (diesel > 0)     gastos.push({ concepto: 'Diesel',         monto: diesel });
+  if (pagoChofer > 0) gastos.push({ concepto: 'Pago de chófer', monto: pagoChofer });
+  gastos.push(...otrosGastos);
+
+  const subtotalIngresos = flete + (reportes[idx].ingresosExtra || []).reduce((s,i) => s + i.monto, 0);
+  const subtotalGastos   = gastos.reduce((s, g) => s + g.monto, 0);
+  const utilidad         = subtotalIngresos - subtotalGastos;
+
+  reportes[idx] = { ...reportes[idx], fecha, cliente, destino, entregadoA, flete, gastos, subtotalIngresos, subtotalGastos, utilidad };
+
+  try {
+    await fsSet('reportes', id, reportes[idx]);
+    _cache.reportes = reportes;
+    closeModal('modal-edit-reporte');
+    toast('Reporte actualizado correctamente', 'success');
+    const pg = document.querySelector('.page.active');
+    if (pg && pg.id === 'page-dashboard') renderDashboard();
+    if (pg && pg.id === 'page-historial') renderHistorial();
+  } catch(e) { console.error(e); toast('Error al guardar', 'error'); }
+}
+
+function deleteUnidad(id) {
+  openModal('modal-confirm');
+  document.getElementById('confirm-msg').textContent = '¿Eliminar esta unidad? Esta acción no se puede deshacer.';
+  document.getElementById('confirm-ok-btn').onclick = async () => {
+    try {
+      await fsDelete('unidades', id);
+      closeModal('modal-confirm');
+      toast('Unidad eliminada', 'info');
+    } catch(e) {
+      toast('Error al eliminar unidad', 'error');
+    }
+  };
+}
+
+// ══════════════════════════════════════════════
+//  CAMBIAR CONTRASEÑA
+// ══════════════════════════════════════════════
+async function changePassword() {
+  const sesion   = DB.sesion;
+  const actual   = document.getElementById('pw-actual').value;
+  const nueva    = document.getElementById('pw-nueva').value;
+  const confirmar = document.getElementById('pw-confirm').value;
+
+  if (!actual || !nueva || !confirmar) { toast('Completa todos los campos', 'warning'); return; }
+
+  const choferes = DB.choferes;
+  const idx = choferes.findIndex(c => c.id === sesion.id);
+  if (idx === -1) { toast('Usuario no encontrado', 'error'); return; }
+  if (choferes[idx].password !== actual)  { toast('La contraseña actual es incorrecta', 'error'); return; }
+  if (nueva !== confirmar) { toast('Las contraseñas no coinciden', 'error'); return; }
+  if (nueva.length < 6)   { toast('La contraseña debe tener al menos 6 caracteres', 'warning'); return; }
+
+  choferes[idx].password = nueva;
+  try {
+    await fsSet('choferes', choferes[idx].id, choferes[idx]);
+    document.getElementById('pw-actual').value  = '';
+    document.getElementById('pw-nueva').value   = '';
+    document.getElementById('pw-confirm').value = '';
+    toast('Contraseña actualizada correctamente', 'success');
+  } catch(e) {
+    toast('Error al actualizar contraseña', 'error');
+  }
+}
+
+// ══════════════════════════════════════════════
+//  EXPORTAR PDF — INDIVIDUAL
+// ══════════════════════════════════════════════
+function exportSinglePDF(id) {
+  const r = DB.reportes.find(x => x.id === id);
+  if (!r) return;
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+
+  // Encabezado
+  doc.setFillColor(15, 15, 20);
+  doc.rect(0, 0, 210, 45, 'F');
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(24);
+  doc.setTextColor(118, 47, 164);
+  doc.text('TRANSPORTES MELGAR', 14, 22);
+  doc.setFontSize(10);
+  doc.setTextColor(150, 150, 170);
+  doc.text('Reporte de Viaje', 14, 32);
+  doc.text('Fecha: ' + fmtDate(r.fecha), 14, 39);
+  doc.setTextColor(118, 47, 164);
+  doc.text('ID: ' + r.id.slice(0, 16), 140, 39);
+
+  // Info general
+  doc.setTextColor(30, 30, 40);
+  doc.setFontSize(11);
+  doc.setFont('helvetica', 'bold');
+  doc.text('DATOS DEL VIAJE', 14, 58);
+  doc.setDrawColor(255, 140, 0);
+  doc.setLineWidth(0.5);
+  doc.line(14, 60, 196, 60);
+
+  doc.autoTable({
+    startY: 63,
+    body: [
+      ['Cliente', r.cliente],
+      ['Destino', r.destino || '—'],
+      ['Unidad',  `${r.unidadPlaca} — ${r.unidadModelo}`],
+      ['Chofer',  r.choferNombre],
+    ],
+    theme: 'plain',
+    styles: { fontSize: 10, cellPadding: 2.5 },
+    columnStyles: { 0: { fontStyle: 'bold', textColor: [100, 100, 120], cellWidth: 60 }, 1: { textColor: [20, 20, 30] } },
+  });
+
+  // Ingresos
+  const ingY = doc.lastAutoTable.finalY + 8;
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(11);
+  doc.setTextColor(34, 197, 94);
+  doc.text('INGRESOS', 14, ingY);
+  doc.setDrawColor(34, 197, 94);
+  doc.line(14, ingY + 2, 196, ingY + 2);
+
+  const ingRows = [[r.cliente || 'Precio de viaje', 'Precio de viaje', '$' + r.flete.toFixed(2)]];
+  (r.ingresosExtra || []).forEach(i => ingRows.push(['', i.concepto, '$' + i.monto.toFixed(2)]));
+  ingRows.push(['', 'TOTAL INGRESOS', '$' + r.subtotalIngresos.toFixed(2)]);
+
+  doc.autoTable({
+    startY: ingY + 5,
+    head: [['Referencia', 'Concepto', 'Monto']],
+    body: ingRows,
+    theme: 'striped',
+    headStyles: { fillColor: [34, 197, 94], textColor: 255 },
+    styles: { fontSize: 9 },
+    columnStyles: { 2: { halign: 'right' } },
+  });
+
+  // Gastos
+  const gasY = doc.lastAutoTable.finalY + 8;
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(11);
+  doc.setTextColor(239, 68, 68);
+  doc.text('GASTOS', 14, gasY);
+  doc.setDrawColor(239, 68, 68);
+  doc.line(14, gasY + 2, 196, gasY + 2);
+
+  const gasRows = (r.gastos || []).map(g => ['', g.concepto, '$' + g.monto.toFixed(2)]);
+  gasRows.push(['', 'TOTAL GASTOS', '$' + r.subtotalGastos.toFixed(2)]);
+  doc.autoTable({
+    startY: gasY + 5,
+    head: [['', 'Concepto', 'Monto']],
+    body: gasRows,
+    theme: 'striped',
+    headStyles: { fillColor: [239, 68, 68], textColor: 255 },
+    styles: { fontSize: 9 },
+    columnStyles: { 2: { halign: 'right' } },
+  });
+
+  // Utilidad
+  const utY = doc.lastAutoTable.finalY + 10;
+  doc.setFillColor(r.utilidad >= 0 ? 34 : 239, r.utilidad >= 0 ? 197 : 68, r.utilidad >= 0 ? 94 : 68);
+  doc.rect(14, utY, 182, 14, 'F');
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(14);
+  doc.setTextColor(255, 255, 255);
+  doc.text('UTILIDAD NETA', 18, utY + 9);
+  doc.text('$' + r.utilidad.toFixed(2), 196, utY + 9, { align: 'right' });
+
+  // Footer
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(8);
+  doc.setTextColor(150, 150, 170);
+  doc.text('Generado por Sistema Transportes Melgar — ' + new Date().toLocaleString('es-MX'), 14, 285);
+
+  doc.save(`reporte-melgar-${r.fecha}-${r.cliente.replace(/\s+/g, '-')}.pdf`);
+  toast('PDF generado correctamente', 'success');
+}
+
+// ══════════════════════════════════════════════
+//  EXPORTAR PDF — TODOS (historial)
+// ══════════════════════════════════════════════
+function exportAllPDF() {
+  const sesion = DB.sesion;
+  let reportes = DB.reportes;
+  if (sesion.rol === 'chofer') reportes = reportes.filter(r => r.chorerId === sesion.id);
+
+  // Aplicar filtros activos
+  const desde = document.getElementById('f-desde').value;
+  const hasta = document.getElementById('f-hasta').value;
+  const filU  = document.getElementById('f-unidad').value;
+  const filC  = document.getElementById('f-chofer').value;
+
+  reportes = reportes.filter(r => {
+    if (desde && r.fecha < desde)        return false;
+    if (hasta && r.fecha > hasta)        return false;
+    if (filU  && r.unidadId !== filU)    return false;
+    if (filC  && r.chorerId !== filC)    return false;
+    return true;
+  }).sort((a, b) => new Date(b.fecha) - new Date(a.fecha));
+
+  if (!reportes.length) { toast('No hay registros para exportar', 'warning'); return; }
+
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+
+  // ── Encabezado limpio sin fondo negro ──
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(18);
+  doc.setTextColor(30, 30, 30);
+  doc.text('TRANSPORTES MELGAR', 14, 18);
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(9);
+  doc.setTextColor(100, 100, 100);
+  doc.text('Historial de Viajes   |   Generado: ' + new Date().toLocaleString('es-MX'), 14, 26);
+
+  // Línea separadora
+  doc.setDrawColor(200, 200, 200);
+  doc.line(14, 30, 283, 30);
+
+  const totalI   = reportes.reduce((s, r) => s + r.subtotalIngresos, 0);
+  const totalG   = reportes.reduce((s, r) => s + r.subtotalGastos,   0);
+  const totalU   = totalI - totalG;
+
+  doc.autoTable({
+    startY: 35,
+    head: [['Fecha', 'Cliente / Destino', 'Unidad', 'Chofer', 'Ingresos', 'Gastos', 'Utilidad']],
+    body: reportes.map(r => [
+      fmtDate(r.fecha),
+      r.cliente + (r.destino ? '\n' + r.destino : ''),
+      r.unidadModelo || r.unidadPlaca,
+      r.choferNombre,
+      '$' + r.subtotalIngresos.toFixed(2),
+      '$' + r.subtotalGastos.toFixed(2),
+      '$' + r.utilidad.toFixed(2),
+    ]),
+    // Fila de totales al final
+    foot: [['', '', '', 'TOTALES', '$' + totalI.toFixed(2), '$' + totalG.toFixed(2), '$' + totalU.toFixed(2)]],
+    theme: 'striped',
+    headStyles: {
+      fillColor: [245, 245, 248],
+      textColor: [30, 30, 30],
+      fontStyle: 'bold',
+      lineColor: [210, 210, 215],
+      lineWidth: 0.3,
+    },
+    footStyles: {
+      fillColor: [245, 245, 248],
+      textColor: [30, 30, 30],
+      fontStyle: 'bold',
+      lineColor: [210, 210, 215],
+      lineWidth: 0.3,
+    },
+    styles: { fontSize: 8.5, cellPadding: 3, textColor: [30, 30, 30] },
+    alternateRowStyles: { fillColor: [250, 250, 252] },
+    columnStyles: {
+      4: { halign: 'right' },
+      5: { halign: 'right' },
+      6: { halign: 'right', fontStyle: 'bold' },
+    },
+    showFoot: 'lastPage',
+  });
+
+  doc.save('historial-melgar-' + new Date().toISOString().split('T')[0] + '.pdf');
+  toast('Reporte PDF exportado', 'success');
+}
+
+// ══════════════════════════════════════════════
+//  COMPARTIR POR WHATSAPP
+// ══════════════════════════════════════════════
+function shareWhatsApp(id) {
+  const r = DB.reportes.find(x => x.id === id);
+  if (!r) return;
+
+  const lines = [
+    `🚛 *TRANSPORTES MELGAR*`,
+    `📋 Reporte de Viaje`,
+    ``,
+    `📅 Fecha: ${fmtDate(r.fecha)}`,
+    `🏢 Cliente: ${r.cliente}`,
+    `📍 Destino: ${r.destino || '—'}`,
+    `🚚 Unidad: ${r.unidadPlaca} — ${r.unidadModelo}`,
+    `👤 Chofer: ${r.choferNombre}`,
+    ``,
+    `💵 *INGRESOS*`,
+    `  • Precio de viaje: $${r.flete.toFixed(2)}`,
+    ...(r.ingresosExtra || []).map(i => `  • ${i.concepto}: $${i.monto.toFixed(2)}`),
+    `  📊 Total: *$${r.subtotalIngresos.toFixed(2)}*`,
+    ``,
+    `💸 *GASTOS*`,
+    ...((r.gastos || []).length
+      ? (r.gastos || []).map(g => `  • ${g.concepto}: $${g.monto.toFixed(2)}`)
+      : ['  • Sin gastos']),
+    `  📊 Total: *$${r.subtotalGastos.toFixed(2)}*`,
+    ``,
+    `${r.utilidad >= 0 ? '✅' : '❌'} *UTILIDAD NETA: $${r.utilidad.toFixed(2)}*`,
+  ];
+
+  window.open(`https://wa.me/?text=${encodeURIComponent(lines.join('\n'))}`, '_blank');
+}
+
+// ══════════════════════════════════════════════
+//  INICIALIZACIÓN
+// ══════════════════════════════════════════════
+// ── INIT ──
+document.getElementById('login-pass').addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
+document.getElementById('login-user').addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
+
+document.querySelectorAll('.modal-overlay').forEach(ov => {
+  ov.addEventListener('click', e => { if (e.target === ov) ov.classList.remove('show'); });
+});
+
+// Mostrar login
+document.getElementById('login-screen').style.display = 'flex';
+
+// Si hay sesión guardada, restaurar automáticamente cuando Firebase esté listo
+_fbReady.then(async () => {
+  const sesionGuardada = DB.sesion;
+  if (sesionGuardada) {
+    document.getElementById('login-btn').disabled = true;
+    document.getElementById('login-btn').innerHTML = '<div class="spinner"></div>';
+    try {
+      await initDefaults();
+      showApp();
+    } catch(e) {
+      document.getElementById('login-btn').disabled = false;
+      document.getElementById('login-btn').innerHTML = 'Iniciar Sesión';
+    }
+  }
+}).catch(err => {
+  console.error('Error Firebase:', err);
+  // Mostrar pantalla de login aunque Firebase falle — admin hardcodeado sigue funcionando
+  document.getElementById('login-screen').style.display = 'flex';
+  toast('Advertencia: problema de conexión con la base de datos.', 'warning');
+});
+
+</script>
+  <!-- Firebase compat — carga al final para no bloquear el HTML -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+  <script>
+    const firebaseConfig = {
+      apiKey:            "AIzaSyANMpH5oor6DOuy5IaiU5LxLxxX5Vb5bik",
+      authDomain:        "basetransportesmelgar.firebaseapp.com",
+      projectId:         "basetransportesmelgar",
+      storageBucket:     "basetransportesmelgar.firebasestorage.app",
+      messagingSenderId: "440678791212",
+      appId:             "1:440678791212:web:a45ca9a46a7c285fab7989"
+    };
+    firebase.initializeApp(firebaseConfig);
+    window._db = firebase.firestore();
+    window._firebaseReady = true;
+  </script>
+</body>
+</html><!DOCTYPE html>
+<html lang="es" data-theme="light">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Transportes Melgar — Sistema de Gestión</title>
+
+  <!-- Fuentes -->
+  <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&display=swap" rel="stylesheet">
+
+  <!-- Librerías PDF -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+
+
+
+
+
+  <style>
+/* ══════════════════════════════════════════════
+   TRANSPORTES MELGAR — Estilos
+   ══════════════════════════════════════════════ */
+
+/* ── VARIABLES DE TEMA ── */
+:root {
+  --bg-primary: #0d0a14;
+  --bg-secondary: #150f20;
+  --bg-card: rgba(255,255,255,0.05);
+  --bg-card-hover: rgba(255,255,255,0.09);
+  --border: rgba(255,255,255,0.09);
+  --border-accent: rgba(157,93,217,0.5);
+  --text-primary: #f0f2f5;
+  --text-secondary: #9d96b8;
+  --text-muted: #5a5278;
+  --accent: #9D5DD9;
+  --accent-2: #762FA4;
+  --accent-glow: rgba(157,93,217,0.18);
+  --success: #36B25F;
+  --danger: #ef4444;
+  --warning: #f59e0b;
+  --info: #57D5D5;
+  --glass: rgba(255,255,255,0.05);
+  --glass-border: rgba(255,255,255,0.12);
+  --shadow: 0 8px 32px rgba(0,0,0,0.4);
+  --radius: 14px;
+  --radius-sm: 8px;
+  --sidebar-w: 260px;
+  --font-body: 'DM Sans', sans-serif;
+  --font-title: 'Bebas Neue', cursive;
+}
+
+[data-theme="light"] {
+  --bg-primary: #f4f0fa;
+  --bg-secondary: #ffffff;
+  --bg-card: rgba(255,255,255,0.85);
+  --bg-card-hover: rgba(255,255,255,0.98);
+  --border: rgba(118,47,164,0.12);
+  --border-accent: rgba(118,47,164,0.4);
+  --text-primary: #1a0d2e;
+  --text-secondary: #5a4878;
+  --text-muted: #9c8db0;
+  --glass: rgba(255,255,255,0.75);
+  --glass-border: rgba(118,47,164,0.15);
+  --shadow: 0 8px 32px rgba(118,47,164,0.12);
+}
+
+/* ── RESET ── */
+*,*::before,*::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { scroll-behavior: smooth; }
+
+body {
+  font-family: var(--font-body);
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  min-height: 100vh;
+  overflow-x: hidden;
+  transition: background 0.3s, color 0.3s;
+}
+body::before {
+  content: '';
+  position: fixed;
+  top: -50%; left: -20%;
+  width: 600px; height: 600px;
+  background: radial-gradient(circle, rgba(118,47,164,0.08) 0%, transparent 70%);
+  pointer-events: none;
+  z-index: 0;
+}
+body::after {
+  content: '';
+  position: fixed;
+  bottom: -30%; right: -10%;
+  width: 500px; height: 500px;
+  background: radial-gradient(circle, rgba(87,213,213,0.04) 0%, transparent 70%);
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* ── SCROLLBAR ── */
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+
+/* ── LOGIN ── */
+#login-screen {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  padding: 1rem;
+  position: relative;
+  z-index: 1;
+}
+.login-card {
+  background: var(--glass);
+  border: 1px solid var(--glass-border);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border-radius: 24px;
+  padding: 2.5rem;
+  width: 100%;
+  max-width: 420px;
+  box-shadow: var(--shadow), 0 0 80px rgba(118,47,164,0.12);
+}
+.login-logo { text-align: center; margin-bottom: 2rem; }
+.login-logo h1 {
+  font-family: var(--font-title);
+  font-size: 2.8rem;
+  letter-spacing: 3px;
+  background: linear-gradient(135deg, #762FA4, #9D5DD9);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  line-height: 1;
+}
+.login-logo p {
+  color: var(--text-secondary);
+  font-size: .85rem;
+  margin-top: .3rem;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+.login-card label {
+  display: block;
+  font-size: .8rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: .8px;
+  margin-bottom: .4rem;
+}
+.login-card input {
+  width: 100%;
+  padding: .75rem 1rem;
+  background: rgba(255,255,255,0.05);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-family: var(--font-body);
+  font-size: .95rem;
+  transition: border-color .2s, box-shadow .2s;
+  margin-bottom: 1.2rem;
+}
+.login-card input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-glow);
+}
+
+/* ── BUTTONS ── */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: .5rem;
+  padding: .7rem 1.4rem;
+  border-radius: var(--radius-sm);
+  font-family: var(--font-body);
+  font-size: .9rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all .2s;
+  border: none;
+  text-decoration: none;
+  white-space: nowrap;
+}
+.btn-primary {
+  background: linear-gradient(135deg, #762FA4, #9D5DD9);
+  color: #fff;
+  box-shadow: 0 4px 16px rgba(118,47,164,0.35);
+}
+.btn-primary:hover { transform: translateY(-1px); box-shadow: 0 6px 24px rgba(157,93,217,0.45); }
+.btn-secondary { background: var(--bg-card); border: 1px solid var(--border); color: var(--text-primary); }
+.btn-secondary:hover { background: var(--bg-card-hover); border-color: var(--border-accent); }
+.btn-danger { background: rgba(239,68,68,0.15); border: 1px solid rgba(239,68,68,0.3); color: var(--danger); }
+.btn-danger:hover { background: rgba(239,68,68,0.25); }
+.btn-success { background: rgba(34,197,94,0.15); border: 1px solid rgba(34,197,94,0.3); color: var(--success); }
+.btn-success:hover { background: rgba(34,197,94,0.25); }
+.btn-sm { padding: .45rem .9rem; font-size: .8rem; }
+.btn-full { width: 100%; }
+.btn-icon {
+  padding: .6rem;
+  border-radius: var(--radius-sm);
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all .2s;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.btn-icon:hover { color: var(--accent); border-color: var(--border-accent); }
+
+/* ── APP SHELL ── */
+#app { display: none; min-height: 100vh; position: relative; z-index: 1; }
+.app-layout { display: flex; min-height: 100vh; }
+
+/* ── SIDEBAR ── */
+.sidebar {
+  width: var(--sidebar-w);
+  background: var(--bg-secondary);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  position: fixed;
+  left: 0; top: 0;
+  height: 100vh;
+  overflow-y: auto;
+  z-index: 100;
+  transition: transform .3s cubic-bezier(.4,0,.2,1);
+}
+.sidebar-brand { padding: 1.5rem 1.25rem 1rem; border-bottom: 1px solid var(--border); }
+.sidebar-brand h2 {
+  font-family: var(--font-title);
+  font-size: 1.6rem;
+  letter-spacing: 2px;
+  background: linear-gradient(135deg, #762FA4, #9D5DD9);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+.sidebar-brand span { font-size: .72rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 1px; }
+.sidebar-user {
+  padding: 1rem 1.25rem;
+  display: flex;
+  align-items: center;
+  gap: .75rem;
+  border-bottom: 1px solid var(--border);
+}
+.avatar {
+  width: 36px; height: 36px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #762FA4, #9D5DD9);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-title);
+  font-size: 1rem;
+  color: #fff;
+  flex-shrink: 0;
+}
+.sidebar-user-info { flex: 1; min-width: 0; }
+.sidebar-user-info strong {
+  display: block;
+  font-size: .85rem;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.sidebar-user-info span { font-size: .72rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: .5px; }
+.sidebar-nav { flex: 1; padding: .75rem 0; }
+.nav-section {
+  padding: .4rem .75rem .2rem 1.25rem;
+  font-size: .68rem;
+  font-weight: 700;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  margin-top: .5rem;
+}
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: .75rem;
+  padding: .7rem 1.25rem;
+  cursor: pointer;
+  transition: all .2s;
+  border-left: 2px solid transparent;
+  color: var(--text-secondary);
+  font-size: .9rem;
+  font-weight: 500;
+  position: relative;
+}
+.nav-item:hover { color: var(--text-primary); background: var(--bg-card); }
+.nav-item.active { color: var(--accent); border-left-color: var(--accent); background: var(--accent-glow); }
+.nav-item svg { width: 18px; height: 18px; flex-shrink: 0; }
+.sidebar-footer { padding: 1rem 1.25rem; border-top: 1px solid var(--border); display: flex; gap: .5rem; }
+
+/* ── MAIN CONTENT ── */
+.main-content { margin-left: var(--sidebar-w); flex: 1; padding: 2rem; min-width: 0; }
+.page { display: none; }
+.page.active { display: block; animation: fadeIn .3s ease; }
+@keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+.page-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 2rem;
+  flex-wrap: wrap;
+  gap: 1rem;
+}
+.page-header h1 { font-family: var(--font-title); font-size: 2.2rem; letter-spacing: 2px; line-height: 1; }
+.page-header p { color: var(--text-secondary); font-size: .85rem; margin-top: .15rem; }
+
+/* ── CARDS ── */
+.card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1.5rem;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  transition: all .2s;
+}
+.card:hover { border-color: var(--border-accent); box-shadow: 0 4px 24px rgba(118,47,164,0.12); }
+
+/* ── METRIC CARDS ── */
+.metric-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-bottom: 1.5rem; }
+.metric-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1.25rem 1.5rem;
+  position: relative;
+  overflow: hidden;
+  transition: all .2s;
+  cursor: default;
+}
+.metric-card::before {
+  content: '';
+  position: absolute;
+  top: 0; right: 0;
+  width: 80px; height: 80px;
+  border-radius: 50%;
+  opacity: .06;
+  transform: translate(20px, -20px);
+}
+.metric-card.income::before  { background: #22c55e; }
+.metric-card.expense::before { background: #ef4444; }
+.metric-card.profit::before  { background: #762FA4; }
+.metric-card.trips::before   { background: #3b82f6; }
+.metric-card:hover { transform: translateY(-2px); box-shadow: var(--shadow); }
+.metric-label { font-size: .75rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: .8px; font-weight: 600; }
+.metric-value { font-family: var(--font-title); font-size: 2rem; letter-spacing: 1px; margin: .3rem 0 .1rem; line-height: 1; }
+.metric-card.income  .metric-value { color: var(--success); }
+.metric-card.expense .metric-value { color: var(--danger); }
+.metric-card.profit  .metric-value { color: var(--accent); }
+.metric-card.trips   .metric-value { color: var(--info); }
+.metric-sub { font-size: .78rem; color: var(--text-secondary); }
+
+/* ── PROFITABILITY BAR ── */
+.profit-bar-wrap { margin-bottom: 1.5rem; }
+.profit-bar-header { display: flex; justify-content: space-between; margin-bottom: .75rem; align-items: center; }
+.profit-bar-track {
+  height: 10px;
+  background: rgba(239,68,68,0.2);
+  border-radius: 99px;
+  overflow: hidden;
+  position: relative;
+}
+.profit-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #36B25F, #57D5D5);
+  border-radius: 99px;
+  transition: width .8s cubic-bezier(.4,0,.2,1);
+  min-width: 4px;
+}
+
+/* ── RECENT ACTIVITY ── */
+.activity-list { display: flex; flex-direction: column; gap: .6rem; }
+.activity-item {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: .9rem 1rem;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  transition: all .2s;
+  cursor: pointer;
+}
+.activity-item:hover { border-color: var(--border-accent); background: var(--bg-card-hover); }
+.activity-badge { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+.activity-info { flex: 1; min-width: 0; }
+.activity-info strong { display: block; font-size: .88rem; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.activity-info span { font-size: .75rem; color: var(--text-secondary); }
+.activity-amount { font-family: var(--font-title); font-size: 1.1rem; letter-spacing: .5px; }
+.positive { color: var(--success); }
+.negative { color: var(--danger); }
+
+/* ── FORM ── */
+.form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; }
+.form-group { display: flex; flex-direction: column; gap: .4rem; }
+.form-group label { font-size: .78rem; font-weight: 600; color: var(--text-secondary); text-transform: uppercase; letter-spacing: .7px; }
+.form-group input,
+.form-group select,
+.form-group textarea {
+  padding: .7rem 1rem;
+  background: rgba(255,255,255,0.05);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-family: var(--font-body);
+  font-size: .92rem;
+  transition: border-color .2s, box-shadow .2s;
+  width: 100%;
+}
+.form-group select option { background: var(--bg-secondary); color: var(--text-primary); }
+.form-group input:focus,
+.form-group select:focus,
+.form-group textarea:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-glow); }
+.form-group textarea { resize: vertical; min-height: 80px; }
+.form-section { margin: 1.5rem 0; }
+.form-section-title {
+  font-family: var(--font-title);
+  font-size: 1.1rem;
+  letter-spacing: 1.5px;
+  color: var(--accent);
+  margin-bottom: 1rem;
+  display: flex;
+  align-items: center;
+  gap: .5rem;
+  padding-bottom: .5rem;
+  border-bottom: 1px solid var(--border);
+}
+.dynamic-items { display: flex; flex-direction: column; gap: .75rem; }
+.dynamic-item { display: grid; grid-template-columns: 1fr auto 32px; gap: .5rem; align-items: start; }
+.dynamic-item.with-label { grid-template-columns: 1fr 1fr auto 32px; }
+.remove-item-btn {
+  width: 32px; height: 36px;
+  border-radius: var(--radius-sm);
+  background: rgba(239,68,68,0.1);
+  border: 1px solid rgba(239,68,68,0.2);
+  color: var(--danger);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all .2s;
+  flex-shrink: 0;
+  margin-top: auto;
+}
+.remove-item-btn:hover { background: rgba(239,68,68,0.2); }
+
+/* ── LIVE CALC ── */
+.live-calc {
+  background: linear-gradient(135deg, rgba(255,140,0,0.08), rgba(255,107,0,0.05));
+  border: 1px solid rgba(157,93,217,0.25);
+  border-radius: var(--radius);
+  padding: 1.25rem 1.5rem;
+  margin-top: 1.5rem;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1rem;
+  text-align: center;
+}
+.calc-item label { font-size: .72rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: .8px; font-weight: 600; }
+.calc-item span { display: block; font-family: var(--font-title); font-size: 1.6rem; letter-spacing: 1px; margin-top: .2rem; }
+
+/* ── TABLE ── */
+.table-wrap { overflow-x: auto; border-radius: var(--radius); border: 1px solid var(--border); }
+table { width: 100%; border-collapse: collapse; font-size: .88rem; }
+thead tr { background: rgba(255,255,255,0.04); border-bottom: 1px solid var(--border); }
+thead th {
+  padding: .85rem 1rem;
+  text-align: left;
+  font-size: .72rem;
+  font-weight: 700;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: .8px;
+  white-space: nowrap;
+}
+tbody tr { border-bottom: 1px solid var(--border); transition: background .15s; }
+tbody tr:last-child { border-bottom: none; }
+tbody tr:hover { background: var(--bg-card-hover); }
+tbody td { padding: .85rem 1rem; color: var(--text-primary); white-space: nowrap; }
+.badge {
+  display: inline-flex;
+  align-items: center;
+  padding: .25rem .6rem;
+  border-radius: 99px;
+  font-size: .72rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.badge-success { background: rgba(34,197,94,0.12);  color: var(--success); border: 1px solid rgba(34,197,94,0.2); }
+.badge-danger  { background: rgba(239,68,68,0.12);  color: var(--danger);  border: 1px solid rgba(239,68,68,0.2); }
+.badge-info    { background: rgba(59,130,246,0.12); color: var(--info);    border: 1px solid rgba(59,130,246,0.2); }
+.badge-warning { background: rgba(245,158,11,0.12); color: var(--warning); border: 1px solid rgba(245,158,11,0.2); }
+.table-actions { display: flex; gap: .4rem; }
+
+/* ── FILTERS ── */
+.filters-bar { display: flex; flex-wrap: wrap; gap: .75rem; margin-bottom: 1.25rem; }
+.filters-bar input,
+.filters-bar select {
+  padding: .6rem .9rem;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-family: var(--font-body);
+  font-size: .85rem;
+  transition: border-color .2s;
+}
+.filters-bar input:focus,
+.filters-bar select:focus { outline: none; border-color: var(--accent); }
+.filters-bar select option { background: var(--bg-secondary); }
+
+/* ── MODAL ── */
+.modal-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,.7);
+  backdrop-filter: blur(4px);
+  z-index: 1000;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+}
+.modal-overlay.show { display: flex; animation: fadeIn .2s ease; }
+.modal {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  width: 100%;
+  max-width: 580px;
+  max-height: 90vh;
+  overflow-y: auto;
+  box-shadow: 0 24px 80px rgba(0,0,0,.5);
+}
+.modal-header {
+  padding: 1.5rem;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  position: sticky;
+  top: 0;
+  background: var(--bg-secondary);
+  z-index: 1;
+}
+.modal-header h3 { font-family: var(--font-title); font-size: 1.5rem; letter-spacing: 1.5px; }
+.modal-body { padding: 1.5rem; }
+.modal-footer { padding: 1.25rem 1.5rem; border-top: 1px solid var(--border); display: flex; gap: .75rem; justify-content: flex-end; }
+.detail-row { display: flex; justify-content: space-between; align-items: baseline; padding: .5rem 0; border-bottom: 1px solid var(--border); }
+
+/* ── Agenda ── */
+.agenda-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); padding: 1.25rem; display: flex; flex-direction: column; gap: .85rem; transition: box-shadow .2s; }
+#agenda-sec-hoy .agenda-card { border-left: 3px solid #762FA4; background: linear-gradient(135deg, rgba(118,47,164,.06), var(--bg-card)); }
+#agenda-sec-manana .agenda-card { border-left: 3px solid #57D5D5; background: linear-gradient(135deg, rgba(87,213,213,.05), var(--bg-card)); }
+.agenda-card:hover { box-shadow: var(--shadow); }
+.agenda-card-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; flex-wrap: wrap; }
+.agenda-card-title { font-family: var(--font-title); font-size: 1.3rem; letter-spacing: 1px; color: var(--text-primary); }
+.agenda-badge { padding: .25rem .75rem; border-radius: 20px; font-size: .72rem; font-weight: 700; letter-spacing: .5px; text-transform: uppercase; }
+.agenda-badge.pendiente  { background: rgba(245,158,11,.15);  color: #f59e0b; }
+.agenda-badge.aceptado   { background: rgba(87,213,213,.15);  color: #57D5D5; }
+.agenda-badge.en-ruta    { background: rgba(157,93,217,.15);  color: #9D5DD9; }
+.agenda-badge.completado { background: rgba(54,178,95,.15);   color: #36B25F; }
+.agenda-badge.pendiente-reporte { background: rgba(245,158,11,.15); color: #f59e0b; }
+.agenda-badge.sin-chofer { background: rgba(239,68,68,.15); color: #ef4444; }
+.agenda-card-info { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px,1fr)); gap: .5rem .75rem; }
+.agenda-info-item { display: flex; flex-direction: column; }
+.agenda-info-item label { font-size: .72rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: .5px; }
+.agenda-info-item span  { font-size: .9rem; font-weight: 600; color: var(--text-primary); }
+.agenda-card-actions { display: flex; gap: .5rem; flex-wrap: wrap; margin-top: .25rem; }
+
+/* Tarjeta de viaje asignado en dashboard chofer */
+.viaje-asignado-card { background: linear-gradient(135deg, rgba(118,47,164,.12), rgba(87,213,213,.08)); border: 1px solid rgba(157,93,217,.4); border-radius: var(--radius); padding: 1.25rem; margin-bottom: 1.25rem; }
+.agenda-resumen { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px,1fr)); gap: .75rem; margin-bottom: 1.25rem; }
+.agenda-resumen-item { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: .85rem 1rem; display: flex; flex-direction: column; gap: .25rem; }
+.agenda-resumen-item .ar-num  { font-family: var(--font-title); font-size: 2rem; letter-spacing: 1px; line-height: 1; }
+.agenda-resumen-item .ar-label { font-size: .72rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: .5px; }
+.viaje-asignado-card h3 { font-family: var(--font-title); font-size: 1.2rem; letter-spacing: 1px; color: var(--accent); margin-bottom: .85rem; display: flex; align-items: center; gap: .5rem; }
+.detail-row:last-child { border-bottom: none; }
+.detail-row span:first-child { color: var(--text-secondary); font-size: .85rem; }
+.detail-row span:last-child { font-weight: 600; font-size: .92rem; }
+.detail-section-title { font-family: var(--font-title); font-size: 1rem; letter-spacing: 1px; color: var(--accent); margin: 1rem 0 .5rem; }
+
+/* ── ADMIN PANEL ── */
+.admin-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1.5rem; }
+.admin-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); padding: 1.5rem; }
+.admin-card h3 { font-family: var(--font-title); font-size: 1.3rem; letter-spacing: 1.5px; margin-bottom: 1rem; display: flex; align-items: center; gap: .5rem; }
+.admin-list { display: flex; flex-direction: column; gap: .5rem; margin-top: 1rem; max-height: 260px; overflow-y: auto; }
+.admin-list-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: .6rem .9rem;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-size: .88rem;
+}
+.admin-list-item span { font-weight: 500; }
+.admin-add-form { display: flex; flex-direction: column; gap: .6rem; }
+.admin-add-form input,
+.admin-add-form select {
+  padding: .65rem .9rem;
+  background: rgba(255,255,255,0.05);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-family: var(--font-body);
+  font-size: .88rem;
+}
+.admin-add-form input:focus,
+.admin-add-form select:focus { outline: none; border-color: var(--accent); }
+
+/* ── TOASTS ── */
+#toast-container {
+  position: fixed;
+  top: 1.25rem; right: 1.25rem;
+  z-index: 9999;
+  display: flex;
+  flex-direction: column;
+  gap: .5rem;
+  pointer-events: none;
+}
+.toast {
+  display: flex;
+  align-items: center;
+  gap: .75rem;
+  padding: .9rem 1.2rem;
+  border-radius: var(--radius-sm);
+  font-size: .88rem;
+  font-weight: 500;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  animation: toastIn .3s cubic-bezier(.4,0,.2,1);
+  pointer-events: auto;
+  max-width: 320px;
+  box-shadow: 0 8px 24px rgba(0,0,0,.3);
+}
+.toast-success { background: rgba(34,197,94,0.15);  border: 1px solid rgba(34,197,94,0.3);  color: var(--success); }
+.toast-error   { background: rgba(239,68,68,0.15);  border: 1px solid rgba(239,68,68,0.3);  color: var(--danger);  }
+.toast-info    { background: rgba(59,130,246,0.15); border: 1px solid rgba(59,130,246,0.3); color: var(--info);    }
+.toast-warning { background: rgba(245,158,11,0.15); border: 1px solid rgba(245,158,11,0.3); color: var(--warning); }
+@keyframes toastIn  { from { opacity: 0; transform: translateX(16px); } to { opacity: 1; transform: translateX(0); } }
+@keyframes toastOut { from { opacity: 1; transform: translateX(0); } to { opacity: 0; transform: translateX(16px); } }
+
+/* ── MOBILE TOPBAR ── */
+.mobile-topbar {
+  display: none;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1rem;
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border);
+  position: sticky;
+  top: 0;
+  z-index: 90;
+}
+.mobile-topbar h2 {
+  font-family: var(--font-title);
+  font-size: 1.3rem;
+  letter-spacing: 1.5px;
+  background: linear-gradient(135deg, #762FA4, #9D5DD9);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+.hamburger { background: none; border: none; cursor: pointer; color: var(--text-primary); padding: .3rem; }
+.sidebar-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.6); z-index: 99; }
+.sidebar-overlay.show { display: block; }
+
+/* ── EMPTY STATE ── */
+.empty-state { text-align: center; padding: 3rem 1rem; }
+.empty-state svg { width: 48px; height: 48px; color: var(--text-muted); margin: 0 auto 1rem; }
+.empty-state p { color: var(--text-secondary); font-size: .9rem; }
+.empty-state strong { display: block; font-size: 1.1rem; color: var(--text-primary); margin-bottom: .4rem; }
+
+/* ── MISC ── */
+.divider { height: 1px; background: var(--border); margin: 1.5rem 0; }
+.spinner {
+  width: 18px; height: 18px;
+  border: 2px solid rgba(255,255,255,.3);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: spin .6s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ── RESPONSIVE ── */
+@media (max-width: 768px) {
+  .sidebar { transform: translateX(-100%); }
+  .sidebar.open { transform: translateX(0); }
+  .main-content { margin-left: 0; padding: 1rem; }
+  .mobile-topbar { display: flex; }
+  .page-header { margin-top: .5rem; }
+  .metric-grid { grid-template-columns: repeat(2, 1fr); }
+  .live-calc { grid-template-columns: 1fr; }
+  .form-grid { grid-template-columns: 1fr; }
+  .dynamic-item.with-label { grid-template-columns: 1fr 1fr; }
+  .dynamic-item.with-label .remove-item-btn { grid-column: span 2; justify-self: end; width: auto; padding: 0 .9rem; }
+  .admin-grid { grid-template-columns: 1fr; }
+  .filters-bar { flex-direction: row; flex-wrap: wrap; }
+  .filters-bar input[type="date"], .filters-bar select { flex: 1; min-width: 130px; }
+}
+@media (max-width: 400px) {
+  .metric-grid { grid-template-columns: 1fr; }
+  .login-card { padding: 1.75rem 1.25rem; }
+}
+
+  </style>
+</head>
+<body>
+
+<!-- ══════════════════════════════════════════
+     PANTALLA DE LOGIN
+══════════════════════════════════════════ -->
+<div id="login-screen">
+  <div class="login-card">
+    <div class="login-logo">
+      <h1>MELGAR</h1>
+      <p>Transportes · Sistema de Gestión</p>
+    </div>
+    <div class="form-group">
+      <label>Usuario</label>
+      <input type="text" id="login-user" placeholder="Ingresa tu usuario" autocomplete="username">
+    </div>
+    <div class="form-group">
+      <label>Contraseña</label>
+      <input type="password" id="login-pass" placeholder="••••••••" autocomplete="current-password">
+    </div>
+    <button class="btn btn-primary btn-full" id="login-btn" style="margin-top:.5rem" onclick="doLogin()">
+      Iniciar Sesión
+    </button>
+    <p style="text-align:center;font-size:.72rem;color:var(--text-muted);margin-top:1rem;letter-spacing:.5px">by DrivySystem</p>
+
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════
+     APLICACIÓN PRINCIPAL
+══════════════════════════════════════════ -->
+<div id="app">
+
+  <!-- Barra superior móvil -->
+  <div class="mobile-topbar">
+    <button class="hamburger" onclick="toggleSidebar()">
+      <svg width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+        <line x1="3" y1="6"  x2="21" y2="6"/>
+        <line x1="3" y1="12" x2="21" y2="12"/>
+        <line x1="3" y1="18" x2="21" y2="18"/>
+      </svg>
+    </button>
+    <h2>MELGAR</h2>
+    <button class="btn-icon" onclick="toggleTheme()" title="Cambiar tema">
+      <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+        <circle cx="12" cy="12" r="5"/>
+        <line x1="12" y1="1"     x2="12" y2="3"/>
+        <line x1="12" y1="21"    x2="12" y2="23"/>
+        <line x1="4.22" y1="4.22"  x2="5.64" y2="5.64"/>
+        <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/>
+        <line x1="1" y1="12"    x2="3" y2="12"/>
+        <line x1="21" y1="12"   x2="23" y2="12"/>
+        <line x1="4.22" y1="19.78"  x2="5.64" y2="18.36"/>
+        <line x1="18.36" y1="5.64"  x2="19.78" y2="4.22"/>
+      </svg>
+    </button>
+  </div>
+
+  <!-- Overlay sidebar móvil -->
+  <div class="sidebar-overlay" id="sidebar-overlay" onclick="toggleSidebar()"></div>
+
+  <div class="app-layout">
+
+    <!-- ─────────────────── SIDEBAR ─────────────────── -->
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar-brand">
+        <h2>MELGAR</h2>
+        <span>Transportes</span>
+      </div>
+
+      <div class="sidebar-user">
+        <div class="avatar" id="user-avatar">A</div>
+        <div class="sidebar-user-info">
+          <strong id="user-name-display">Admin</strong>
+          <span id="user-role-display">Administrador</span>
+        </div>
+      </div>
+
+      <nav class="sidebar-nav">
+        <div class="nav-section">Principal</div>
+
+        <div class="nav-item active" onclick="navigate('dashboard')">
+          <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <rect x="3" y="3"   width="7" height="7" rx="1"/>
+            <rect x="14" y="3"  width="7" height="7" rx="1"/>
+            <rect x="3" y="14"  width="7" height="7" rx="1"/>
+            <rect x="14" y="14" width="7" height="7" rx="1"/>
+          </svg>
+          Dashboard
+        </div>
+
+        <div class="nav-item" onclick="navigate('nuevo-reporte')">
+          <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <circle cx="12" cy="12" r="10"/>
+            <line x1="12" y1="8"  x2="12" y2="16"/>
+            <line x1="8"  y1="12" x2="16" y2="12"/>
+          </svg>
+          Nuevo Reporte
+        </div>
+
+        <div class="nav-item" onclick="navigate('historial')">
+          <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+            <polyline points="14 2 14 8 20 8"/>
+            <line x1="16" y1="13" x2="8" y2="13"/>
+            <line x1="16" y1="17" x2="8" y2="17"/>
+            <polyline points="10 9 9 9 8 9"/>
+          </svg>
+          Historial
+        </div>
+
+        <!-- Solo visible para admin -->
+        <div class="nav-item" id="nav-agenda" onclick="navigate('agenda')" style="display:none">
+          <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
+            <line x1="16" y1="2" x2="16" y2="6"/>
+            <line x1="8"  y1="2" x2="8"  y2="6"/>
+            <line x1="3"  y1="10" x2="21" y2="10"/>
+          </svg>
+          Agenda de Viajes
+        </div>
+
+        <div class="nav-item" id="nav-admin" onclick="navigate('admin')" style="display:none">
+          <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path d="M12 2L2 7l10 5 10-5-10-5z"/>
+            <path d="M2 17l10 5 10-5"/>
+            <path d="M2 12l10 5 10-5"/>
+          </svg>
+          Administración
+        </div>
+
+        <div class="nav-section">Cuenta</div>
+
+        <div class="nav-item" onclick="navigate('cambiar-password')">
+          <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+            <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+          </svg>
+          Cambiar Contraseña
+        </div>
+      </nav>
+
+      <div class="sidebar-footer">
+        <button class="btn-icon" onclick="toggleTheme()"
+          style="flex:1;justify-content:center;gap:.5rem;font-size:.82rem;color:var(--text-secondary)">
+          <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <circle cx="12" cy="12" r="5"/>
+            <line x1="12" y1="1"     x2="12" y2="3"/>
+            <line x1="12" y1="21"    x2="12" y2="23"/>
+            <line x1="4.22" y1="4.22"   x2="5.64" y2="5.64"/>
+            <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/>
+            <line x1="1"  y1="12" x2="3"  y2="12"/>
+            <line x1="21" y1="12" x2="23" y2="12"/>
+            <line x1="4.22" y1="19.78"  x2="5.64" y2="18.36"/>
+            <line x1="18.36" y1="5.64"  x2="19.78" y2="4.22"/>
+          </svg>
+          Tema
+        </button>
+
+        <button class="btn-icon" onclick="doLogout()"
+          style="flex:1;justify-content:center;gap:.5rem;font-size:.82rem;color:var(--danger)">
+          <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+            <polyline points="16 17 21 12 16 7"/>
+            <line x1="21" y1="12" x2="9" y2="12"/>
+          </svg>
+          Salir
+        </button>
+      </div>
+    </aside>
+
+    <!-- ─────────────────── CONTENIDO PRINCIPAL ─────────────────── -->
+    <main class="main-content">
+
+      <!-- ══ DASHBOARD ══ -->
+      <div class="page active" id="page-dashboard">
+        <div class="page-header">
+          <div>
+            <h1>Dashboard</h1>
+            <p id="dash-greeting">Bienvenido de vuelta</p>
+          </div>
+          <div id="dash-date" style="font-size:.82rem;color:var(--text-muted)"></div>
+        </div>
+
+        <div id="viajes-asignados-container"></div>
+        <div class="metric-grid" id="metrics-grid"></div>
+
+        <div id="admin-agenda-resumen"></div>
+        <div class="card profit-bar-wrap">
+          <div class="profit-bar-header">
+            <span style="font-size:.82rem;font-weight:600;color:var(--text-secondary)">RENTABILIDAD GENERAL</span>
+            <span id="profit-pct" style="font-family:var(--font-title);font-size:1.1rem;color:var(--accent)">0%</span>
+          </div>
+          <div class="profit-bar-track">
+            <div class="profit-bar-fill" id="profit-bar" style="width:0%"></div>
+          </div>
+          <div style="display:flex;justify-content:space-between;margin-top:.4rem;font-size:.72rem;color:var(--text-muted)">
+            <span>0% — Pérdida</span><span>100% — Ganancia total</span>
+          </div>
+        </div>
+
+        <div class="card">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem">
+            <span style="font-size:.82rem;font-weight:700;color:var(--text-secondary);text-transform:uppercase;letter-spacing:.8px">
+              Actividad Reciente
+            </span>
+            <button class="btn btn-sm btn-secondary" onclick="navigate('historial')">Ver todo</button>
+          </div>
+          <div class="activity-list" id="activity-list">
+            <div class="empty-state"><p>Sin registros aún</p></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ══ NUEVO REPORTE ══ -->
+      <div class="page" id="page-nuevo-reporte">
+        <div class="page-header">
+          <div><h1>Nuevo Reporte</h1><p>Registra un nuevo viaje</p></div>
+        </div>
+
+        <div class="card">
+          <!-- Datos generales -->
+          <div class="form-grid">
+            <div class="form-group">
+              <label>Fecha del viaje</label>
+              <input type="date" id="r-fecha">
+            </div>
+            <div class="form-group" id="r-chofer-group">
+              <label>Chofer</label>
+              <select id="r-chofer"></select>
+            </div>
+            <div class="form-group">
+              <label>Unidad</label>
+              <select id="r-unidad"></select>
+            </div>
+            <div class="form-group">
+              <label>Cliente</label>
+              <input type="text" id="r-cliente" placeholder="Ej. CEMEX">
+            </div>
+            <div class="form-group">
+              <label>Destino</label>
+              <input type="text" id="r-destino" placeholder="Ej. Monterrey, NL">
+            </div>
+            <div class="form-group">
+              <label>Entregado a</label>
+              <input type="text" id="r-entregado" placeholder="Ej. Juan Pérez">
+            </div>
+          </div>
+
+          <!-- Sección Ingresos -->
+          <div class="form-section">
+            <div class="form-section-title">
+              <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                <polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/>
+                <polyline points="17 6 23 6 23 12"/>
+              </svg>
+              Ingresos
+            </div>
+
+            <div class="form-group" style="max-width:280px">
+              <label>Precio de viaje</label>
+              <input type="number" id="r-flete" placeholder="$0.00" min="0" step="0.01" oninput="calcLive()">
+            </div>
+
+            <div style="margin-top:.75rem">
+              <div class="dynamic-items" id="ingresos-extra"></div>
+              <button class="btn btn-secondary btn-sm" style="margin-top:.75rem" onclick="addIngreso()">
+                <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                  <circle cx="12" cy="12" r="10"/>
+                  <line x1="12" y1="8"  x2="12" y2="16"/>
+                  <line x1="8"  y1="12" x2="16" y2="12"/>
+                </svg>
+                Añadir Ingreso Extra
+              </button>
+            </div>
+          </div>
+
+          <!-- Sección Gastos -->
+          <div class="form-section">
+            <div class="form-section-title">
+              <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                <polyline points="23 18 13.5 8.5 8.5 13.5 1 6"/>
+                <polyline points="17 18 23 18 23 12"/>
+              </svg>
+              Gastos
+            </div>
+
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:.75rem;margin-bottom:.75rem">
+              <div class="form-group">
+                <label>Diesel</label>
+                <input type="number" id="g-diesel" placeholder="$0.00" min="0" step="0.01" oninput="calcLive()">
+              </div>
+              <div class="form-group">
+                <label>Pago de chófer</label>
+                <input type="number" id="g-pago-chofer" placeholder="$0.00" min="0" step="0.01" oninput="calcLive()">
+              </div>
+            </div>
+
+            <div class="dynamic-items" id="gastos-list"></div>
+
+            <button class="btn btn-secondary btn-sm" style="margin-top:.5rem" onclick="addGasto('')">
+              <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
+              Otro gasto
+            </button>
+          </div>
+
+          <!-- Calculadora en vivo -->
+          <div class="live-calc">
+            <div class="calc-item">
+              <label>Total Ingresos</label>
+              <span class="positive" id="calc-ingresos">$0.00</span>
+            </div>
+            <div class="calc-item">
+              <label>Total Gastos</label>
+              <span class="negative" id="calc-gastos">$0.00</span>
+            </div>
+            <div class="calc-item">
+              <label>Utilidad Neta</label>
+              <span id="calc-utilidad">$0.00</span>
+            </div>
+          </div>
+
+          <div style="display:flex;gap:.75rem;justify-content:flex-end;margin-top:1.5rem;flex-wrap:wrap">
+            <button class="btn btn-secondary" onclick="resetForm()">Limpiar</button>
+            <button class="btn btn-primary"   onclick="saveReporte()">
+              <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
+                <polyline points="17 21 17 13 7 13 7 21"/>
+                <polyline points="7 3 7 8 15 8"/>
+              </svg>
+              Guardar Reporte
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- ══ HISTORIAL ══ -->
+      <div class="page" id="page-historial">
+        <div class="page-header">
+          <div><h1>Historial</h1><p>Todos los viajes registrados</p></div>
+          <button class="btn btn-primary btn-sm" id="btn-export-pdf" onclick="exportAllPDF()">
+            <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+              <polyline points="7 10 12 15 17 10"/>
+              <line x1="12" y1="15" x2="12" y2="3"/>
+            </svg>
+            Exportar PDF
+          </button>
+        </div>
+
+        <!-- Filtros -->
+        <div class="card" id="filtros-card" style="padding:1rem">
+          <div class="filters-bar">
+            <input type="date" id="f-desde" placeholder="Desde" onchange="renderHistorial()">
+            <input type="date" id="f-hasta" placeholder="Hasta" onchange="renderHistorial()">
+            <select id="f-unidad" class="admin-filter" onchange="renderHistorial()">
+              <option value="">Todas las unidades</option>
+            </select>
+            <select id="f-chofer" class="admin-filter" onchange="renderHistorial()">
+              <option value="">Todos los choferes</option>
+            </select>
+            <button class="btn btn-secondary btn-sm admin-filter" onclick="clearFilters()">Limpiar</button>
+          </div>
+        </div>
+
+        <!-- Tabla -->
+        <div class="table-wrap" style="margin-top:1rem">
+          <div id="historial-tbody" style="display:flex;flex-direction:column;gap:.6rem;margin-top:.25rem"></div>
+        </div>
+
+        <div id="historial-empty" class="empty-state" style="display:none">
+          <svg fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+            <polyline points="14 2 14 8 20 8"/>
+          </svg>
+          <strong>Sin registros</strong>
+          <p>No hay viajes que coincidan con los filtros.</p>
+        </div>
+      </div>
+
+      <!-- ══ ADMINISTRACIÓN ══ -->
+      <!-- ════════════════ AGENDA ════════════════ -->
+      <div class="page" id="page-agenda">
+        <div class="page-header">
+          <div>
+            <h1>Agenda de Viajes</h1>
+            <p id="agenda-subtitle">Programa y gestiona los viajes asignados</p>
+          </div>
+          <button class="btn btn-primary" onclick="openModalAgenda()">
+            <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/>
+            </svg>
+            Agendar Viaje
+          </button>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:1.75rem;margin-top:1rem">
+          <div id="agenda-sec-hoy"></div>
+          <div id="agenda-sec-manana"></div>
+          <div id="agenda-sec-resto"></div>
+        </div>
+      </div>
+
+      <div class="page" id="page-admin">
+        <div class="page-header">
+          <div><h1>Administración</h1><p>Gestión de personal y flota</p></div>
+        </div>
+
+        <div class="admin-grid">
+          <!-- Choferes -->
+          <div class="admin-card">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem">
+              <h3 style="margin-bottom:0">
+                <svg width="18" height="18" fill="none" stroke="var(--accent)" stroke-width="2" viewBox="0 0 24 24">
+                  <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+                  <circle cx="9" cy="7" r="4"/>
+                  <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
+                  <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+                </svg>
+                Choferes
+              </h3>
+              <button class="btn btn-primary btn-sm" onclick="openModal('modal-nuevo-chofer')">
+                <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
+                Nuevo Chofer
+              </button>
+            </div>
+            <div class="admin-list" id="choferes-list"></div>
+          </div>
+
+          <!-- Unidades -->
+          <div class="admin-card">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem">
+              <h3 style="margin-bottom:0">
+                <svg width="18" height="18" fill="none" stroke="var(--accent)" stroke-width="2" viewBox="0 0 24 24">
+                  <rect x="1" y="3" width="15" height="13" rx="2"/>
+                  <polygon points="16 8 20 8 23 11 23 16 16 16 16 8"/>
+                  <circle cx="5.5"  cy="18.5" r="2.5"/>
+                  <circle cx="18.5" cy="18.5" r="2.5"/>
+                </svg>
+                Unidades
+              </h3>
+              <button class="btn btn-primary btn-sm" onclick="openModal('modal-nueva-unidad')">
+                <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
+                Nueva Unidad
+              </button>
+            </div>
+            <div class="admin-list" id="unidades-list"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ══ CAMBIAR CONTRASEÑA ══ -->
+      <div class="page" id="page-cambiar-password">
+        <div class="page-header">
+          <div><h1>Contraseña</h1><p>Actualiza tu contraseña de acceso</p></div>
+        </div>
+        <div class="card" style="max-width:460px">
+          <div style="display:flex;flex-direction:column;gap:1rem">
+            <div class="form-group">
+              <label>Contraseña actual</label>
+              <input type="password" id="pw-actual" placeholder="••••••••">
+            </div>
+            <div class="form-group">
+              <label>Nueva contraseña</label>
+              <input type="password" id="pw-nueva" placeholder="••••••••">
+            </div>
+            <div class="form-group">
+              <label>Confirmar nueva contraseña</label>
+              <input type="password" id="pw-confirm" placeholder="••••••••">
+            </div>
+            <button class="btn btn-primary" onclick="changePassword()">Actualizar Contraseña</button>
+          </div>
+        </div>
+      </div>
+
+    </main>
+  </div><!-- /.app-layout -->
+</div><!-- /#app -->
+
+
+<!-- ══════════════════════════════════════════
+     MODAL — Nuevo Chofer
+══════════════════════════════════════════ -->
+<div class="modal-overlay" id="modal-nuevo-chofer">
+  <div class="modal" style="max-width:420px">
+    <div class="modal-header">
+      <h3>Nuevo Chofer</h3>
+      <button class="btn-icon" onclick="closeModal('modal-nuevo-chofer')">
+        <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+        </svg>
+      </button>
+    </div>
+    <div class="modal-body" style="display:flex;flex-direction:column;gap:.9rem">
+      <div class="form-group">
+        <label>Nombre completo</label>
+        <input type="text" id="new-chofer-nombre" placeholder="Ej. Juan Pérez">
+      </div>
+      <div class="form-group">
+        <label>Usuario (login)</label>
+        <input type="text" id="new-chofer-user" placeholder="Ej. jperez">
+      </div>
+      <div class="form-group">
+        <label>Contraseña</label>
+        <input type="password" id="new-chofer-pass" placeholder="••••••••">
+      </div>
+      <div class="form-group">
+        <label>Rol</label>
+        <select id="new-chofer-rol">
+          <option value="chofer">Chofer</option>
+          <option value="admin">Administrador</option>
+        </select>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('modal-nuevo-chofer')">Cancelar</button>
+      <button class="btn btn-primary" onclick="addChofer()">Guardar Chofer</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════
+     MODAL — Nueva Unidad
+══════════════════════════════════════════ -->
+<div class="modal-overlay" id="modal-nueva-unidad">
+  <div class="modal" style="max-width:420px">
+    <div class="modal-header">
+      <h3>Nueva Unidad</h3>
+      <button class="btn-icon" onclick="closeModal('modal-nueva-unidad')">
+        <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+        </svg>
+      </button>
+    </div>
+    <div class="modal-body" style="display:flex;flex-direction:column;gap:.9rem">
+      <div class="form-group">
+        <label>Placa</label>
+        <input type="text" id="new-unidad-placa" placeholder="Ej. ABC-123">
+      </div>
+      <div class="form-group">
+        <label>Modelo</label>
+        <input type="text" id="new-unidad-modelo" placeholder="Ej. Kenworth T680">
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('modal-nueva-unidad')">Cancelar</button>
+      <button class="btn btn-primary" onclick="addUnidad()">Guardar Unidad</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════
+     MODAL — Detalle del viaje
+══════════════════════════════════════════ -->
+<div class="modal-overlay" id="modal-detalle">
+  <div class="modal">
+    <div class="modal-header">
+      <h3>Detalle del Viaje</h3>
+      <button class="btn-icon" onclick="closeModal('modal-detalle')">
+        <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <line x1="18" y1="6"  x2="6"  y2="18"/>
+          <line x1="6"  y1="6"  x2="18" y2="18"/>
+        </svg>
+      </button>
+    </div>
+    <div class="modal-body" id="modal-detalle-body"></div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('modal-detalle')">Cerrar</button>
+      <button class="btn btn-secondary" id="modal-edit-btn" style="border-color:var(--accent);color:var(--accent)">
+        <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+        Editar
+      </button>
+      <button class="btn btn-success"   id="modal-share-btn">
+        <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+        </svg>
+        WhatsApp
+      </button>
+
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════
+     MODAL — Confirmación de eliminación
+══════════════════════════════════════════ -->
+<!-- ══════════════════════════════════════════
+     MODAL — Nuevo Viaje Agenda
+══════════════════════════════════════════ -->
+<div class="modal-overlay" id="modal-nuevo-viaje-agenda">
+  <div class="modal" style="max-width:480px">
+    <div class="modal-header">
+      <h3>Agendar Viaje</h3>
+      <button class="btn-icon" onclick="closeModal('modal-nuevo-viaje-agenda')">
+        <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+        </svg>
+      </button>
+    </div>
+    <div class="modal-body" style="display:flex;flex-direction:column;gap:.85rem">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:.75rem">
+        <div class="form-group">
+          <label>Fecha</label>
+          <input type="date" id="av-fecha">
+        </div>
+        <div class="form-group">
+          <label>Hora de salida</label>
+          <input type="time" id="av-hora">
+        </div>
+      </div>
+      <div class="form-group">
+        <label>Cliente</label>
+        <input type="text" id="av-cliente" placeholder="Ej. CEMEX">
+      </div>
+      <div class="form-group">
+        <label>Destino</label>
+        <input type="text" id="av-destino" placeholder="Ej. Monterrey, NL">
+      </div>
+      <div class="form-group">
+        <label>Precio de viaje</label>
+        <input type="number" id="av-flete" placeholder="$0.00" min="0" step="0.01">
+      </div>
+      <div class="form-group">
+        <label>Asignar Chofer</label>
+        <select id="av-chofer"></select>
+      </div>
+      <div class="form-group">
+        <label>Unidad</label>
+        <select id="av-unidad"></select>
+      </div>
+      <div class="form-group">
+        <label>Pago de Chofer</label>
+        <input type="number" id="av-pago-chofer" placeholder="$0.00" min="0" step="0.01">
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('modal-nuevo-viaje-agenda')">Cancelar</button>
+      <button class="btn btn-primary"   onclick="saveViajeAgenda()">Agendar Viaje</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════
+     MODAL — Editar Reporte (Vista Chofer)
+══════════════════════════════════════════ -->
+<div class="modal-overlay" id="modal-edit-reporte-chofer">
+  <div class="modal" style="max-width:440px">
+    <div class="modal-header">
+      <h3>Editar Reporte</h3>
+      <button class="btn-icon" onclick="closeModal('modal-edit-reporte-chofer')">
+        <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+        </svg>
+      </button>
+    </div>
+    <div class="modal-body" style="display:flex;flex-direction:column;gap:.85rem">
+      <div class="form-group">
+        <label>Entregado a</label>
+        <input type="text" id="erc-entregado" placeholder="Ej. Juan Pérez">
+      </div>
+      <div class="form-group">
+        <label>Diesel</label>
+        <input type="number" id="erc-diesel" placeholder="$0.00" min="0" step="0.01">
+      </div>
+      <div class="form-group">
+        <label>Otros gastos</label>
+        <div id="erc-gastos-list" style="display:flex;flex-direction:column;gap:.5rem"></div>
+        <button class="btn btn-secondary btn-sm" style="margin-top:.5rem" onclick="addGastoChoferEdit()">+ Agregar gasto</button>
+      </div>
+      <input type="hidden" id="erc-id">
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('modal-edit-reporte-chofer')">Cancelar</button>
+      <button class="btn btn-primary"   onclick="saveEditReporteChofer()">Guardar Cambios</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════
+     MODAL — Editar Viaje Agendado
+══════════════════════════════════════════ -->
+<div class="modal-overlay" id="modal-edit-viaje-agenda">
+  <div class="modal" style="max-width:480px">
+    <div class="modal-header">
+      <h3>Editar Viaje Agendado</h3>
+      <button class="btn-icon" onclick="closeModal('modal-edit-viaje-agenda')">
+        <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+        </svg>
+      </button>
+    </div>
+    <div class="modal-body" style="display:flex;flex-direction:column;gap:.85rem">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:.75rem">
+        <div class="form-group">
+          <label>Fecha</label>
+          <input type="date" id="ea-fecha">
+        </div>
+        <div class="form-group">
+          <label>Hora de salida</label>
+          <input type="time" id="ea-hora">
+        </div>
+      </div>
+      <div class="form-group">
+        <label>Cliente</label>
+        <input type="text" id="ea-cliente" placeholder="Ej. CEMEX">
+      </div>
+      <div class="form-group">
+        <label>Destino</label>
+        <input type="text" id="ea-destino" placeholder="Ej. Monterrey, NL">
+      </div>
+      <div class="form-group">
+        <label>Precio de viaje</label>
+        <input type="number" id="ea-flete" placeholder="$0.00" min="0" step="0.01">
+      </div>
+      <div class="form-group">
+        <label>Chofer asignado</label>
+        <select id="ea-chofer"></select>
+      </div>
+      <div class="form-group">
+        <label>Unidad</label>
+        <select id="ea-unidad"></select>
+      </div>
+      <div class="form-group">
+        <label>Pago de Chofer</label>
+        <input type="number" id="ea-pago-chofer" placeholder="$0.00" min="0" step="0.01">
+      </div>
+      <input type="hidden" id="ea-id">
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('modal-edit-viaje-agenda')">Cancelar</button>
+      <button class="btn btn-primary"   onclick="saveEditViajeAgenda()">Guardar Cambios</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════
+     MODAL — Asignar Chofer a Viaje
+══════════════════════════════════════════ -->
+<div class="modal-overlay" id="modal-asignar-chofer">
+  <div class="modal" style="max-width:380px">
+    <div class="modal-header">
+      <h3>Asignar Chofer</h3>
+      <button class="btn-icon" onclick="closeModal('modal-asignar-chofer')">
+        <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+        </svg>
+      </button>
+    </div>
+    <div class="modal-body" style="display:flex;flex-direction:column;gap:.85rem">
+      <div class="form-group">
+        <label>Selecciona el chofer</label>
+        <select id="ac-chofer"></select>
+      </div>
+      <div class="form-group">
+        <label>Unidad</label>
+        <select id="ac-unidad"></select>
+      </div>
+      <input type="hidden" id="ac-id">
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('modal-asignar-chofer')">Cancelar</button>
+      <button class="btn btn-primary"   onclick="saveAsignarChofer()">Asignar</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════
+     MODAL — Editar Reporte
+══════════════════════════════════════════ -->
+<div class="modal-overlay" id="modal-edit-reporte">
+  <div class="modal" style="max-width:520px">
+    <div class="modal-header">
+      <h3>Editar Viaje</h3>
+      <button class="btn-icon" onclick="closeModal('modal-edit-reporte')">
+        <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+        </svg>
+      </button>
+    </div>
+    <div class="modal-body" style="display:flex;flex-direction:column;gap:.85rem">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:.75rem">
+        <div class="form-group">
+          <label>Fecha</label>
+          <input type="date" id="er-fecha">
+        </div>
+        <div class="form-group">
+          <label>Cliente</label>
+          <input type="text" id="er-cliente" placeholder="Ej. CEMEX">
+        </div>
+        <div class="form-group">
+          <label>Destino</label>
+          <input type="text" id="er-destino" placeholder="Ej. Monterrey, NL">
+        </div>
+        <div class="form-group">
+          <label>Entregado a</label>
+          <input type="text" id="er-entregado" placeholder="Ej. Juan Pérez">
+        </div>
+      </div>
+      <div class="form-group">
+        <label>Precio de viaje</label>
+        <input type="number" id="er-flete" placeholder="$0.00" min="0" step="0.01">
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:.75rem">
+        <div class="form-group">
+          <label>Diesel</label>
+          <input type="number" id="er-diesel" placeholder="$0.00" min="0" step="0.01">
+        </div>
+        <div class="form-group">
+          <label>Pago de chófer</label>
+          <input type="number" id="er-pago-chofer" placeholder="$0.00" min="0" step="0.01">
+        </div>
+      </div>
+      <input type="hidden" id="er-id">
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('modal-edit-reporte')">Cancelar</button>
+      <button class="btn btn-primary"   onclick="saveEditReporte()">Guardar Cambios</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════
+     MODAL — Editar Unidad
+══════════════════════════════════════════ -->
+<div class="modal-overlay" id="modal-edit-unidad">
+  <div class="modal" style="max-width:420px">
+    <div class="modal-header">
+      <h3>Editar Unidad</h3>
+      <button class="btn-icon" onclick="closeModal('modal-edit-unidad')">
+        <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+        </svg>
+      </button>
+    </div>
+    <div class="modal-body" style="display:flex;flex-direction:column;gap:.9rem">
+      <div class="form-group">
+        <label>Placa</label>
+        <input type="text" id="edit-unidad-placa" placeholder="Ej. ABC-123">
+      </div>
+      <div class="form-group">
+        <label>Modelo</label>
+        <input type="text" id="edit-unidad-modelo" placeholder="Ej. Kenworth T680">
+      </div>
+      <input type="hidden" id="edit-unidad-id">
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('modal-edit-unidad')">Cancelar</button>
+      <button class="btn btn-primary"   onclick="saveEditUnidad()">Guardar Cambios</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════
+     MODAL — Editar Chofer
+══════════════════════════════════════════ -->
+<div class="modal-overlay" id="modal-edit-chofer">
+  <div class="modal" style="max-width:420px">
+    <div class="modal-header">
+      <h3>Editar Usuario</h3>
+      <button class="btn-icon" onclick="closeModal('modal-edit-chofer')">
+        <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+        </svg>
+      </button>
+    </div>
+    <div class="modal-body" style="display:flex;flex-direction:column;gap:.9rem">
+      <div class="form-group">
+        <label>Nombre</label>
+        <input type="text" id="edit-chofer-nombre" placeholder="Nombre completo">
+      </div>
+      <div class="form-group">
+        <label>Nueva contraseña <span style="color:var(--text-muted);font-weight:400">(dejar vacío para no cambiar)</span></label>
+        <input type="password" id="edit-chofer-pass" placeholder="••••••••">
+      </div>
+      <div class="form-group">
+        <label>Rol</label>
+        <select id="edit-chofer-rol">
+          <option value="chofer">Chofer</option>
+          <option value="admin">Administrador</option>
+        </select>
+      </div>
+      <input type="hidden" id="edit-chofer-id">
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('modal-edit-chofer')">Cancelar</button>
+      <button class="btn btn-primary" onclick="saveEditChofer()">Guardar Cambios</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="modal-confirm">
+  <div class="modal" style="max-width:380px">
+    <div class="modal-header">
+      <h3>Confirmar</h3>
+      <button class="btn-icon" onclick="closeModal('modal-confirm')">
+        <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <line x1="18" y1="6"  x2="6"  y2="18"/>
+          <line x1="6"  y1="6"  x2="18" y2="18"/>
+        </svg>
+      </button>
+    </div>
+    <div class="modal-body">
+      <p id="confirm-msg" style="color:var(--text-secondary);line-height:1.6"></p>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('modal-confirm')">Cancelar</button>
+      <button class="btn btn-danger"    id="confirm-ok-btn">Eliminar</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════
+     CONTENEDOR DE TOASTS
+══════════════════════════════════════════ -->
+<div id="toast-container"></div>
+
+
+
+<script>
+// ══════════════════════════════════════════════
+//  TRANSPORTES MELGAR — Lógica de la aplicación
+// ══════════════════════════════════════════════
+
+// ── TEMA (ejecutar antes del DOM para evitar flash) ──
+(function () {
+  const t = localStorage.getItem('theme') || 'light';
+  document.documentElement.setAttribute('data-theme', t);
+})();
+
+// ══════════════════════════════════════════════
+//  ESTADO GLOBAL — Caché en memoria + Firebase
+// ══════════════════════════════════════════════
+const ADMIN_DEFAULT = { id: 'c0', nombre: 'Administrador', username: 'admin', password: 'admin123', rol: 'admin' };
+
+// Caché local (se sincroniza con Firestore)
+const _cache = { choferes: [], unidades: [], reportes: [], agenda: [] };
+
+// Sesión: solo en localStorage (no viaja a la nube)
+const _mem = {};
+const _sessionStore = {
+  getItem: k => { try { return localStorage.getItem(k); } catch(e) { return _mem[k] || null; } },
+  setItem: (k,v) => { try { localStorage.setItem(k,v); } catch(e) { _mem[k]=v; } },
+  removeItem: k => { try { localStorage.removeItem(k); } catch(e) { delete _mem[k]; } },
+};
+const _store = _sessionStore; // alias para compatibilidad
+
+const DB = {
+  get choferes()  { return _cache.choferes; },
+  get unidades()  { return _cache.unidades; },
+  get reportes()  { return _cache.reportes; },
+  get agenda()    { return _cache.agenda;   },
+  get sesion()    { return JSON.parse(_sessionStore.getItem('sesionActual') || 'null'); },
+  set sesion(v)   { 
+    if (v === null) _sessionStore.removeItem('sesionActual');
+    else _sessionStore.setItem('sesionActual', JSON.stringify(v)); 
+  },
+};
+
+// ── Esperar a que Firebase esté listo (polling robusto) ──
+const _fbReady = new Promise((resolve, reject) => {
+  let intentos = 0;
+  const check = () => {
+    if (window._firebaseReady && window._db) {
+      resolve();
+    } else if (intentos++ > 100) { // 5 segundos máximo
+      reject(new Error('Firebase no cargó a tiempo'));
+    } else {
+      setTimeout(check, 50);
+    }
+  };
+  check();
+});
+
+// ── Helpers Firestore (API compat) ──
+function _fdb() { return window._db; }
+
+async function fsGetAll(col) {
+  const snap = await _fdb().collection(col).get();
+  return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+}
+
+async function fsSet(col, id, data) {
+  const d = { ...data }; delete d.id;
+  await _fdb().collection(col).doc(id).set(d);
+}
+
+async function fsDelete(col, id) {
+  await _fdb().collection(col).doc(id).delete();
+}
+
+// ── Suscripciones en tiempo real ──
+// ══════════════════════════════════════════════
+//  NOTIFICACIONES AL CHOFER
+// ══════════════════════════════════════════════
+function playNotifSound() {
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    // Dos tonos cortos tipo "ping"
+    [0, 220].forEach(delay => {
+      const osc  = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(880, ctx.currentTime + delay / 1000);
+      osc.frequency.setValueAtTime(1100, ctx.currentTime + delay / 1000 + 0.1);
+      gain.gain.setValueAtTime(0.4, ctx.currentTime + delay / 1000);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + delay / 1000 + 0.35);
+      osc.start(ctx.currentTime + delay / 1000);
+      osc.stop(ctx.currentTime + delay / 1000 + 0.35);
+    });
+  } catch(e) { /* AudioContext no disponible */ }
+}
+
+async function notificarChofer(viaje) {
+  playNotifSound();
+  // Notificación del sistema si el usuario la autorizó
+  if (Notification.permission === 'granted') {
+    new Notification('🚛 Nuevo viaje asignado', {
+      body: `${viaje.cliente} → ${viaje.destino}\nFecha: ${fmtDate(viaje.fecha)}${viaje.hora ? ' · ' + viaje.hora : ''}`,
+      icon: 'https://jfuentes89.github.io/favicon.ico',
+      tag:  'viaje-' + viaje.id,
+    });
+  }
+  // Toast visible dentro de la app
+  toast('🚛 Nuevo viaje asignado: ' + viaje.cliente + ' → ' + viaje.destino, 'success');
+}
+
+function pedirPermisoNotificacion() {
+  if ('Notification' in window && Notification.permission === 'default') {
+    Notification.requestPermission();
+  }
+}
+
+function subscribeAll() {
+  const db = _fdb();
+
+  db.collection('choferes').onSnapshot(snap => {
+    _cache.choferes = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    if (!_cache.choferes.find(c => c.id === 'c0')) _cache.choferes.unshift(ADMIN_DEFAULT);
+    const pg = document.querySelector('.page.active');
+    if (pg && pg.id === 'page-admin') renderAdmin();
+    if (pg && pg.id === 'page-nuevo-reporte') initForm();
+  });
+
+  db.collection('unidades').onSnapshot(snap => {
+    _cache.unidades = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    const pg = document.querySelector('.page.active');
+    if (pg && pg.id === 'page-admin') renderAdmin();
+    if (pg && pg.id === 'page-nuevo-reporte') initForm();
+  });
+
+  db.collection('reportes').orderBy('fecha', 'desc').onSnapshot(snap => {
+    _cache.reportes = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    const pg = document.querySelector('.page.active');
+    if (pg && pg.id === 'page-dashboard') renderDashboard();
+    if (pg && pg.id === 'page-historial') renderHistorial();
+  });
+
+  // Reset diario: limpiar viajes 'completado' de días anteriores del caché visual
+  // (no se borran de Firestore, solo no se muestran en el resumen de hoy)
+  db.collection('agenda').orderBy('fecha', 'asc').onSnapshot(snap => {
+    const prevIds   = new Set((_cache.agenda || []).map(v => v.id));
+    const nuevos    = snap.docChanges().filter(c => c.type === 'added' || c.type === 'modified');
+    const sesion    = DB.sesion;
+    _cache.agenda   = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+
+    // Notificar al chofer si le asignaron un viaje nuevo o recién asignado
+    if (sesion && sesion.rol === 'chofer') {
+      nuevos.forEach(c => {
+        const v = { id: c.doc.id, ...c.doc.data() };
+        // Solo si este viaje es para este chofer, tiene estado 'pendiente' y antes no existía o no tenía chofer
+        if (v.chorerId === sesion.id && v.estado === 'pendiente') {
+          const eraDesconocido = !prevIds.has(v.id);
+          const prev = (_cache.agenda || []).find(x => x.id === v.id);
+          const recienAsignado = prev && !prev.chorerId && v.chorerId;
+          if (eraDesconocido || recienAsignado) {
+            notificarChofer(v);
+          }
+        }
+      });
+    }
+
+    const pg = document.querySelector('.page.active');
+    if (pg && pg.id === 'page-agenda')    renderAgenda();
+    if (pg && pg.id === 'page-dashboard') renderDashboard();
+  });
+}
+
+// ── Carga inicial + suscripciones ──
+async function initDefaults() {
+  await _fbReady;
+
+  const [choferes, unidades, reportes, agenda] = await Promise.all([
+    fsGetAll('choferes'),
+    fsGetAll('unidades'),
+    fsGetAll('reportes'),
+    fsGetAll('agenda'),
+  ]);
+
+  _cache.choferes = choferes;
+  _cache.unidades = unidades;
+  _cache.reportes = reportes;
+  _cache.agenda   = agenda;
+
+  if (!_cache.choferes.find(c => c.id === 'c0')) {
+    await fsSet('choferes', 'c0', ADMIN_DEFAULT);
+    _cache.choferes.unshift(ADMIN_DEFAULT);
+  }
+
+  subscribeAll();
+}
+
+// ══════════════════════════════════════════════
+//  UTILIDADES
+// ══════════════════════════════════════════════
+const uid = () => 'id_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7);
+
+const fmt = n =>
+  '$' + Number(n || 0).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+const fmtDate = d => {
+  if (!d) return '—';
+  const p = d.split('-');
+  return `${p[2]}/${p[1]}/${p[0]}`;
+};
+
+function toast(msg, type = 'info') {
+  const tc = document.getElementById('toast-container');
+  const t = document.createElement('div');
+  t.className = `toast toast-${type}`;
+  const icons = { success: '✓', error: '✕', info: 'ℹ', warning: '⚠' };
+  t.innerHTML = `<span style="font-weight:700">${icons[type] || '•'}</span>${msg}`;
+  tc.appendChild(t);
+  setTimeout(() => {
+    t.style.animation = 'toastOut .3s forwards';
+    setTimeout(() => t.remove(), 300);
+  }, 3200);
+}
+
+function openModal(id)  { document.getElementById(id).classList.add('show'); }
+function closeModal(id) { document.getElementById(id).classList.remove('show'); }
+
+// ══════════════════════════════════════════════
+//  AUTENTICACIÓN
+// ══════════════════════════════════════════════
+async function doLogin() {
+  const u = document.getElementById('login-user').value.trim();
+  const p = document.getElementById('login-pass').value;
+  if (!u || !p) { toast('Completa todos los campos', 'warning'); return; }
+
+  const btn = document.getElementById('login-btn');
+  btn.disabled = true;
+  btn.innerHTML = '<div class="spinner"></div> Conectando...';
+
+  try {
+    // 1. Esperar Firebase
+    await _fbReady;
+
+    // 2. Cargar choferes si no están en caché
+    if (!_cache.choferes.length) {
+      const lista = await fsGetAll('choferes');
+      _cache.choferes = lista;
+      if (!_cache.choferes.find(c => c.id === 'c0')) _cache.choferes.unshift(ADMIN_DEFAULT);
+    }
+
+    // 3. Verificar credenciales (primero BD, luego fallback admin hardcodeado)
+    const chofer = _cache.choferes.find(c => c.username === u && c.password === p)
+                 || (u === ADMIN_DEFAULT.username && p === ADMIN_DEFAULT.password ? ADMIN_DEFAULT : null);
+
+    if (!chofer) { toast('Credenciales incorrectas', 'error'); return; }
+
+    // 4. Guardar sesión y cargar todo
+    DB.sesion = { id: chofer.id, nombre: chofer.nombre, username: chofer.username, rol: chofer.rol };
+    await initDefaults();
+    showApp();
+
+  } catch(err) {
+    console.error('Login error:', err);
+    toast('Error de conexión. Intenta de nuevo.', 'error');
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = 'Iniciar Sesión';
+  }
+}
+
+function doLogout() {
+  DB.sesion = null;
+  document.getElementById('app').style.display = 'none';
+  document.getElementById('login-screen').style.display = 'flex';
+  document.getElementById('login-user').value = '';
+  document.getElementById('login-pass').value = '';
+  toast('Sesión cerrada', 'info');
+}
+
+function showApp() {
+  const sesion = DB.sesion;
+  document.getElementById('login-screen').style.display = 'none';
+  document.getElementById('app').style.display = 'block';
+  document.getElementById('user-name-display').textContent = sesion.nombre;
+  document.getElementById('user-role-display').textContent = sesion.rol === 'admin' ? 'Administrador' : 'Chofer';
+  document.getElementById('user-avatar').textContent = sesion.nombre.charAt(0).toUpperCase();
+  document.getElementById('nav-admin').style.display  = sesion.rol === 'admin' ? 'flex' : 'none';
+  document.getElementById('nav-agenda').style.display = sesion.rol === 'admin' ? 'flex' : 'none';
+
+  // Historial: ocultar filtros y botón PDF para rol chofer
+  const esAdmin = sesion.rol === 'admin';
+  document.getElementById('btn-export-pdf').style.display = esAdmin ? '' : 'none';
+  document.getElementById('filtros-card').style.display   = esAdmin ? '' : 'none';
+
+  navigate('dashboard');
+  // Pedir permiso de notificaciones (solo choferes)
+  if (sesion.rol === 'chofer') pedirPermisoNotificacion();
+}
+
+// ══════════════════════════════════════════════
+//  NAVEGACIÓN
+// ══════════════════════════════════════════════
+function navigate(page) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+
+  const map = {
+    'dashboard':         'page-dashboard',
+    'nuevo-reporte':     'page-nuevo-reporte',
+    'historial':         'page-historial',
+    'admin':             'page-admin',
+    'agenda':            'page-agenda',
+    'cambiar-password':  'page-cambiar-password',
+  };
+
+  const pg = document.getElementById(map[page]);
+  if (pg) pg.classList.add('active');
+
+  document.querySelectorAll('.nav-item').forEach(n => {
+    if (n.getAttribute('onclick') && n.getAttribute('onclick').includes(`'${page}'`))
+      n.classList.add('active');
+  });
+
+  // Cerrar sidebar en móvil
+  const sb = document.getElementById('sidebar');
+  if (sb.classList.contains('open')) toggleSidebar();
+
+  // Init específico de cada página
+  if (page === 'dashboard')        renderDashboard();
+  if (page === 'nuevo-reporte')    initForm();
+  if (page === 'historial')        renderHistorial();
+  if (page === 'admin')            renderAdmin();
+  if (page === 'agenda')           renderAgenda();
+}
+
+function toggleSidebar() {
+  document.getElementById('sidebar').classList.toggle('open');
+  document.getElementById('sidebar-overlay').classList.toggle('show');
+}
+
+// ══════════════════════════════════════════════
+//  TEMA
+// ══════════════════════════════════════════════
+function toggleTheme() {
+  const html = document.documentElement;
+  const isDark = html.getAttribute('data-theme') === 'dark';
+  html.setAttribute('data-theme', isDark ? 'light' : 'dark');
+  localStorage.setItem('theme', isDark ? 'light' : 'dark');
+}
+
+// ══════════════════════════════════════════════
+//  DASHBOARD
+// ══════════════════════════════════════════════
 function renderDashboard() {
   const sesion = DB.sesion;
   const esChofer = sesion.rol === 'chofer';
