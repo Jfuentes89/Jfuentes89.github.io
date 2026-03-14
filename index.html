@@ -1330,6 +1330,10 @@ tbody td { padding: .85rem 1rem; color: var(--text-primary); white-space: nowrap
         <input type="text" id="av-cliente" placeholder="Ej. CEMEX">
       </div>
       <div class="form-group">
+        <label>Origen de Viaje</label>
+        <input type="text" id="av-origen" placeholder="Ej. Guadalajara, Jal">
+      </div>
+      <div class="form-group">
         <label>Destino</label>
         <input type="text" id="av-destino" placeholder="Ej. Monterrey, NL">
       </div>
@@ -1420,6 +1424,10 @@ tbody td { padding: .85rem 1rem; color: var(--text-primary); white-space: nowrap
       <div class="form-group">
         <label>Cliente</label>
         <input type="text" id="ea-cliente" placeholder="Ej. CEMEX">
+      </div>
+      <div class="form-group">
+        <label>Origen de Viaje</label>
+        <input type="text" id="ea-origen" placeholder="Ej. Guadalajara, Jal">
       </div>
       <div class="form-group">
         <label>Destino</label>
@@ -2634,6 +2642,7 @@ async function saveViajeAgenda() {
   const fecha    = document.getElementById('av-fecha').value;
   const hora     = document.getElementById('av-hora').value;
   const cliente  = document.getElementById('av-cliente').value.trim();
+  const origen   = document.getElementById('av-origen').value.trim();
   const destino  = document.getElementById('av-destino').value.trim();
   const flete    = parseFloat(document.getElementById('av-flete').value) || 0;
   const chorerId = document.getElementById('av-chofer').value;
@@ -2645,12 +2654,12 @@ async function saveViajeAgenda() {
 
   const pagoChofer = parseFloat(document.getElementById('av-pago-chofer').value) || 0;
   const estado = chorerId ? 'pendiente' : 'sin-chofer';
-  const viaje = { id: uid(), fecha, hora, cliente, destino, flete, pagoChofer, chorerId, unidadId, estado, creadoEn: new Date().toISOString() };
+  const viaje = { id: uid(), fecha, hora, cliente, origen, destino, flete, pagoChofer, chorerId, unidadId, estado, creadoEn: new Date().toISOString() };
 
   try {
     await fsSet('agenda', viaje.id, viaje);
     // Limpiar
-    ['av-fecha','av-hora','av-cliente','av-destino','av-flete','av-pago-chofer'].forEach(id => document.getElementById(id).value = '');
+    ['av-fecha','av-hora','av-cliente','av-origen','av-destino','av-flete','av-pago-chofer'].forEach(id => document.getElementById(id).value = '');
     document.getElementById('av-chofer').value = '';
     document.getElementById('av-unidad').value = '';
     closeModal('modal-nuevo-viaje-agenda');
@@ -2674,6 +2683,7 @@ function openEditViajeAgenda(id) {
   document.getElementById('ea-fecha').value   = v.fecha  || '';
   document.getElementById('ea-hora').value    = v.hora   || '';
   document.getElementById('ea-cliente').value = v.cliente || '';
+  document.getElementById('ea-origen').value  = v.origen  || '';
   document.getElementById('ea-destino').value = v.destino || '';
   document.getElementById('ea-flete').value        = v.flete      || '';
   document.getElementById('ea-pago-chofer').value  = v.pagoChofer || '';
@@ -2685,6 +2695,7 @@ async function saveEditViajeAgenda() {
   const fecha    = document.getElementById('ea-fecha').value;
   const hora     = document.getElementById('ea-hora').value;
   const cliente  = document.getElementById('ea-cliente').value.trim();
+  const origen   = document.getElementById('ea-origen').value.trim();
   const destino  = document.getElementById('ea-destino').value.trim();
   const flete      = parseFloat(document.getElementById('ea-flete').value) || 0;
   const pagoChofer = parseFloat(document.getElementById('ea-pago-chofer').value) || 0;
@@ -2699,7 +2710,7 @@ async function saveEditViajeAgenda() {
   const idx = agenda.findIndex(v => v.id === id);
   if (idx === -1) { toast('Viaje no encontrado', 'error'); return; }
 
-  agenda[idx] = { ...agenda[idx], fecha, hora, cliente, destino, flete, pagoChofer, chorerId, unidadId };
+  agenda[idx] = { ...agenda[idx], fecha, hora, cliente, origen, destino, flete, pagoChofer, chorerId, unidadId };
 
   try {
     await fsSet('agenda', id, agenda[idx]);
@@ -2876,6 +2887,7 @@ function renderViajesChofer(sesion) {
         <div class="agenda-info-item"><label>Fecha</label><span>${fmtDate(v.fecha)}</span></div>
         <div class="agenda-info-item"><label>Hora</label><span>${v.hora || '—'}</span></div>
         <div class="agenda-info-item"><label>Cliente</label><span>${v.cliente}</span></div>
+        ${v.origen ? `<div class="agenda-info-item"><label>Origen</label><span>${v.origen}</span></div>` : ''}
         <div class="agenda-info-item"><label>Destino</label><span>${v.destino}</span></div>
         <div class="agenda-info-item"><label>Precio</label><span style="color:var(--success)">${fmt(v.flete)}</span></div>
         ${unidad ? `<div class="agenda-info-item"><label>Unidad</label><span>${unidad.modelo}</span></div>` : ''}
