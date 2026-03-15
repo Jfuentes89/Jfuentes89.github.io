@@ -2743,7 +2743,6 @@ function renderAgendaFinalizados() {
         <span>${fmtDate(v.fecha)}${v.hora ? ' · ' + v.hora : ''}${chofer ? ' · ' + chofer.nombre : ''}${unidad ? ' · ' + unidad.modelo : ''}</span>
       </div>
       <div style="display:flex;flex-direction:column;align-items:flex-end;gap:.2rem;flex-shrink:0">
-        <span class="activity-amount positive">${fmt(v.flete)}</span>
         <span style="font-size:.7rem;color:var(--success);font-weight:600">Completado</span>
       </div>
     </div>`;
