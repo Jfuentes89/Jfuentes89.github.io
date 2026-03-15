@@ -2732,7 +2732,22 @@ function renderAgendaFinalizados() {
     el.innerHTML = '<div class="empty-state"><p>Sin viajes finalizados.</p></div>';
     return;
   }
-  el.innerHTML = completados.map(_buildAgendaCard).join('');
+  el.innerHTML = completados.map(v => {
+    const chofer = DB.choferes.find(c => c.id === v.chorerId);
+    const unidad = DB.unidades.find(u => u.id === v.unidadId);
+    return `
+    <div class="activity-item" style="cursor:default">
+      <div class="activity-badge" style="background:var(--success)"></div>
+      <div class="activity-info" style="flex:1;min-width:0">
+        <strong>${v.cliente || '—'} — ${v.destino || ''}</strong>
+        <span>${fmtDate(v.fecha)}${v.hora ? ' · ' + v.hora : ''}${chofer ? ' · ' + chofer.nombre : ''}${unidad ? ' · ' + unidad.modelo : ''}</span>
+      </div>
+      <div style="display:flex;flex-direction:column;align-items:flex-end;gap:.2rem;flex-shrink:0">
+        <span class="activity-amount positive">${fmt(v.flete)}</span>
+        <span style="font-size:.7rem;color:var(--success);font-weight:600">Completado</span>
+      </div>
+    </div>`;
+  }).join('');
 }
 
 function openModalAgenda() {
