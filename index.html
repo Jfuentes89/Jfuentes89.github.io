@@ -826,6 +826,14 @@ tbody td { padding: .85rem 1rem; color: var(--text-primary); white-space: nowrap
           Historial
         </div>
 
+        <div class="nav-item" id="nav-stats" onclick="navigate('stats')">
+          <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/>
+            <line x1="6"  y1="20" x2="6"  y2="14"/><line x1="2" y1="20" x2="22" y2="20"/>
+          </svg>
+          Estadísticas
+        </div>
+
         <!-- Solo visible para admin -->
         <div class="nav-item" id="nav-agenda" onclick="navigate('agenda')" style="display:none">
           <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
@@ -1126,6 +1134,21 @@ tbody td { padding: .85rem 1rem; color: var(--text-primary); white-space: nowrap
             Ver Viajes Finalizados
           </button>
         </div>
+      </div>
+
+      <!-- ══ ESTADÍSTICAS ══ -->
+      <div class="page" id="page-stats">
+        <div class="page-header">
+          <div>
+            <h1>Estadísticas</h1>
+            <p id="stats-subtitle">Análisis de rendimiento</p>
+          </div>
+          <div style="display:flex;gap:.5rem;align-items:center">
+            <select id="stats-anio" class="admin-filter" onchange="renderStats()" style="width:auto"></select>
+            <select id="stats-mes"  class="admin-filter" onchange="renderStats()" style="width:auto"></select>
+          </div>
+        </div>
+        <div id="stats-container" style="display:flex;flex-direction:column;gap:1.5rem;margin-top:1rem"></div>
       </div>
 
       <div class="page" id="page-admin">
@@ -2008,6 +2031,7 @@ function navigate(page) {
     'historial':         'page-historial',
     'admin':             'page-admin',
     'agenda':            'page-agenda',
+    'stats':             'page-stats',
     'cambiar-password':  'page-cambiar-password',
   };
 
@@ -2029,6 +2053,7 @@ function navigate(page) {
   if (page === 'historial')        renderHistorial();
   if (page === 'admin')            renderAdmin();
   if (page === 'agenda')           renderAgenda();
+  if (page === 'stats')            renderStats();
 }
 
 function toggleSidebar() {
@@ -2990,6 +3015,256 @@ function renderViajesChofer(sesion) {
   }).join('');
 }
 
+// ══════════════════════════════════════════════
+//  ESTADÍSTICAS
+// ══════════════════════════════════════════════
+const _charts = {};
+
+function _destroyChart(id) {
+  if (_charts[id]) { _charts[id].destroy(); delete _charts[id]; }
+}
+
+function _makeChart(id, config) {
+  _destroyChart(id);
+  const canvas = document.getElementById(id);
+  if (!canvas) return;
+  _charts[id] = new Chart(canvas.getContext('2d'), config);
+}
+
+function _chartCard(title, canvasId) {
+  return `<div class="card" style="padding:1.25rem">
+    <div style="font-family:var(--font-title);font-size:.95rem;letter-spacing:1.5px;color:var(--text-secondary);margin-bottom:1rem">${title}</div>
+    <div style="position:relative;height:220px"><canvas id="${canvasId}"></canvas></div>
+  </div>`;
+}
+
+function renderStats() {
+  const container = document.getElementById('stats-container');
+  if (!container) return;
+
+  const sesion = DB.sesion;
+  const esAdmin = sesion.rol === 'admin';
+  const ahora = new Date();
+
+  // Poblar selectores año y mes
+  const selAnio = document.getElementById('stats-anio');
+  const selMes  = document.getElementById('stats-mes');
+  const anioActual = ahora.getFullYear();
+
+  if (selAnio.options.length === 0) {
+    for (let y = anioActual; y >= anioActual - 3; y--) {
+      const o = document.createElement('option');
+      o.value = y; o.textContent = y;
+      selAnio.appendChild(o);
+    }
+    selAnio.value = anioActual;
+  }
+  if (selMes.options.length === 0) {
+    const meses = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+    meses.forEach((m,i) => {
+      const o = document.createElement('option');
+      o.value = i; o.textContent = m;
+      selMes.appendChild(o);
+    });
+    selMes.value = ahora.getMonth();
+  }
+
+  const anioSel = parseInt(selAnio.value);
+  const mesSel  = parseInt(selMes.value);
+  const diasEnMes = new Date(anioSel, mesSel + 1, 0).getDate();
+  const meses = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+
+  let reportes = DB.reportes;
+  if (!esAdmin) reportes = reportes.filter(r => r.chorerId === sesion.id);
+
+  // ── Filtrar por mes seleccionado ──
+  const reportesMes = reportes.filter(r => {
+    if (!r.fecha) return false;
+    const [y, m] = r.fecha.split('-').map(Number);
+    return y === anioSel && (m - 1) === mesSel;
+  });
+
+  // ── Filtrar por año seleccionado ──
+  const reportesAnio = reportes.filter(r => {
+    if (!r.fecha) return false;
+    return parseInt(r.fecha.split('-')[0]) === anioSel;
+  });
+
+  // ─────────────────────────────────
+  // DATOS: diarios del mes
+  // ─────────────────────────────────
+  const dailyLabels = Array.from({length: diasEnMes}, (_, i) => String(i + 1));
+
+  let dailyData, dailyLabel, dailyColors;
+  if (esAdmin) {
+    dailyData = dailyLabels.map(d => {
+      const dia = String(d).padStart(2,'0');
+      const fecha = `${anioSel}-${String(mesSel+1).padStart(2,'0')}-${dia}`;
+      return reportesMes.filter(r => r.fecha === fecha)
+                        .reduce((s, r) => s + r.utilidad, 0);
+    });
+    dailyLabel  = 'Utilidad Neta Diaria';
+    dailyColors = dailyData.map(v => v >= 0 ? 'rgba(54,178,95,.75)' : 'rgba(239,68,68,.75)');
+  } else {
+    dailyData = dailyLabels.map(d => {
+      const dia = String(d).padStart(2,'0');
+      const fecha = `${anioSel}-${String(mesSel+1).padStart(2,'0')}-${dia}`;
+      return reportesMes.filter(r => r.fecha === fecha).reduce((s, r) => {
+        const g = (r.gastos||[]).find(x => x.concepto && x.concepto.toLowerCase().includes('pago de ch'));
+        return s + (g ? g.monto : 0);
+      }, 0);
+    });
+    dailyLabel  = 'Pago de Chófer Diario';
+    dailyColors = 'rgba(157,93,217,.75)';
+  }
+
+  // ─────────────────────────────────
+  // DATOS: mensuales del año
+  // ─────────────────────────────────
+  let monthlyData, monthlyLabel;
+  if (esAdmin) {
+    monthlyData = meses.map((_, i) => {
+      return reportesAnio.filter(r => parseInt(r.fecha.split('-')[1]) - 1 === i)
+                         .reduce((s, r) => s + r.utilidad, 0);
+    });
+    monthlyLabel = 'Utilidad Neta Mensual';
+  } else {
+    monthlyData = meses.map((_, i) => {
+      return reportesAnio.filter(r => parseInt(r.fecha.split('-')[1]) - 1 === i)
+                         .reduce((s, r) => {
+                           const g = (r.gastos||[]).find(x => x.concepto && x.concepto.toLowerCase().includes('pago de ch'));
+                           return s + (g ? g.monto : 0);
+                         }, 0);
+    });
+    monthlyLabel = 'Pago de Chófer Mensual';
+  }
+
+  const monthlyColors = monthlyData.map(v => v >= 0 ? 'rgba(87,213,213,.75)' : 'rgba(239,68,68,.75)');
+
+  // ─────────────────────────────────
+  // DATOS: por chofer (solo admin)
+  // ─────────────────────────────────
+  let choferHtml = '';
+  if (esAdmin) {
+    const choferes = DB.choferes.filter(c => c.id !== 'c0');
+    const choferLabels = choferes.map(c => c.nombre);
+    const choferData   = choferes.map(c =>
+      reportesMes.filter(r => r.chorerId === c.id).reduce((s, r) => s + r.utilidad, 0)
+    );
+    const choferCardHeight = Math.max(180, choferes.length * 52);
+    choferHtml = `<div class="card" style="padding:1.25rem">
+      <div style="font-family:var(--font-title);font-size:.95rem;letter-spacing:1.5px;color:var(--text-secondary);margin-bottom:1rem">UTILIDAD POR CHOFER — ${meses[mesSel].toUpperCase()} ${anioSel}</div>
+      <div style="position:relative;height:${choferCardHeight}px"><canvas id="chart-chofer"></canvas></div>
+    </div>`;
+    setTimeout(() => {
+      const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+      const textColor = isDark ? '#b0b8c8' : '#555e6d';
+      const gridColor = isDark ? 'rgba(255,255,255,.06)' : 'rgba(0,0,0,.06)';
+      _makeChart('chart-chofer', {
+        type: 'bar',
+        data: {
+          labels: choferLabels,
+          datasets: [{ label: 'Utilidad', data: choferData,
+            backgroundColor: choferData.map(v => v >= 0 ? 'rgba(54,178,95,.8)' : 'rgba(239,68,68,.8)'),
+            borderRadius: 4, borderSkipped: false }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              callbacks: {
+                label: ctx => ' $' + Number(ctx.parsed.y || 0)
+                  .toLocaleString('es-MX', { minimumFractionDigits: 2 })
+              }
+            }
+          },
+          scales: {
+            x: {
+              ticks: { color: textColor, font: { size: 11, weight: '600' } },
+              grid: { color: isDark ? 'rgba(255,255,255,.18)' : 'rgba(0,0,0,.12)', lineWidth: 1 },
+              border: { color: isDark ? 'rgba(255,255,255,.35)' : 'rgba(0,0,0,.25)' }
+            },
+            y: {
+              ticks: {
+                color: textColor, font: { size: 10 },
+                callback: v => '$' + Number(v).toLocaleString('es-MX', { minimumFractionDigits: 0 })
+              },
+              grid: { color: isDark ? 'rgba(255,255,255,.18)' : 'rgba(0,0,0,.12)', lineWidth: 1 },
+              border: { color: isDark ? 'rgba(255,255,255,.35)' : 'rgba(0,0,0,.25)' }
+            }
+          }
+        }
+      });
+    }, 50);
+  }
+
+  // ─────────────────────────────────
+  // Renderizar HTML
+  // ─────────────────────────────────
+  const tituloMes  = esAdmin ? 'UTILIDAD NETA DIARIA — ' : 'PAGOS DIARIOS — ';
+  const tituloAnio = esAdmin ? 'UTILIDAD NETA MENSUAL — ' : 'PAGOS MENSUALES — ';
+
+  container.innerHTML =
+    _chartCard(tituloMes  + meses[mesSel].toUpperCase() + ' ' + anioSel, 'chart-daily') +
+    _chartCard(tituloAnio + anioSel, 'chart-monthly') +
+    choferHtml;
+
+  // Dibujar después de que el DOM se actualice
+  setTimeout(() => {
+    _makeChart('chart-daily', {
+      type: 'bar',
+      data: {
+        labels: dailyLabels,
+        datasets: [{ label: dailyLabel, data: dailyData,
+          backgroundColor: dailyColors, borderRadius: 4, borderSkipped: false }]
+      },
+      options: _chartOpts(false)
+    });
+
+    _makeChart('chart-monthly', {
+      type: 'bar',
+      data: {
+        labels: meses,
+        datasets: [{ label: monthlyLabel, data: monthlyData,
+          backgroundColor: monthlyColors, borderRadius: 6, borderSkipped: false }]
+      },
+      options: _chartOpts(false)
+    });
+  }, 50);
+}
+
+function _chartOpts(indexAxis) {
+  const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+  const textColor  = isDark ? '#b0b8c8' : '#555e6d';
+  const gridColor  = isDark ? 'rgba(255,255,255,.18)' : 'rgba(0,0,0,.12)';
+  const borderColor = isDark ? 'rgba(255,255,255,.35)' : 'rgba(0,0,0,.25)';
+  return {
+    indexAxis: indexAxis ? 'y' : 'x',
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: { display: false },
+      tooltip: {
+        callbacks: {
+          label: ctx => ' $' + Number(ctx.parsed[indexAxis ? 'x' : 'y'] || 0)
+            .toLocaleString('es-MX', { minimumFractionDigits: 2 })
+        }
+      }
+    },
+    scales: {
+      x: { ticks: { color: textColor, font: { size: 10 } },
+           grid: { color: gridColor, lineWidth: 1 },
+           border: { color: borderColor } },
+      y: { ticks: { color: textColor, font: { size: 10 },
+            callback: v => '$' + Number(v).toLocaleString('es-MX', { minimumFractionDigits: 0 }) },
+           grid: { color: gridColor, lineWidth: 1 },
+           border: { color: borderColor } }
+    }
+  };
+}
+
 function renderAdmin() {
   const choferes = DB.choferes;
   const unidades = DB.unidades;
@@ -3599,6 +3874,7 @@ _fbReady.then(async () => {
 });
 
 </script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
   <!-- Firebase compat — carga al final para no bloquear el HTML -->
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
