@@ -1877,6 +1877,10 @@ async function initDefaults() {
   }
 
   subscribeAll();
+  // Limpiar finalizados expirados al cargar y cada hora
+  await limpiarFinalizadosExpirados();
+  if (window._cleanupInterval) clearInterval(window._cleanupInterval);
+  window._cleanupInterval = setInterval(limpiarFinalizadosExpirados, 60 * 60 * 1000);
 }
 
 // ══════════════════════════════════════════════
@@ -2576,10 +2580,12 @@ function showDetalle(id) {
     </div>`;
 
   document.getElementById('modal-share-btn').onclick = () => shareWhatsApp(id);
+  const editBtn = document.getElementById('modal-edit-btn');
   if (DB.sesion.rol === 'chofer') {
-    document.getElementById('modal-edit-btn').onclick = () => openEditReporteChofer(id);
+    editBtn.style.display = 'none';
   } else {
-    document.getElementById('modal-edit-btn').onclick = () => openEditReporte(id);
+    editBtn.style.display = '';
+    editBtn.onclick = () => openEditReporte(id);
   }
   openModal('modal-detalle');
 }
@@ -2696,16 +2702,58 @@ function renderAgenda() {
   }
 }
 
+async function limpiarFinalizadosExpirados() {
+  const LIMITE_MS = 48 * 60 * 60 * 1000; // 48 horas en ms
+  const ahora = Date.now();
+  const expirados = DB.agenda.filter(v => {
+    if (v.estado !== 'completado') return false;
+    if (!v.completadoEn) return false; // sin timestamp no tocar
+    return (ahora - new Date(v.completadoEn).getTime()) > LIMITE_MS;
+  });
+  for (const v of expirados) {
+    try {
+      await fsDelete('agenda', v.id);
+      _cache.agenda = _cache.agenda.filter(x => x.id !== v.id);
+    } catch(e) { console.error('Error eliminando viaje expirado:', e); }
+  }
+  if (expirados.length > 0) {
+    console.log(`[Agenda] ${expirados.length} viaje(s) finalizado(s) eliminado(s) por expiración (>48h)`);
+  }
+}
+
 function renderAgendaFinalizados() {
-  const completados = DB.agenda.filter(v => v.estado === 'completado')
-                               .sort((a,b) => b.fecha.localeCompare(a.fecha));
+  const ahora = Date.now();
+  const LIMITE_MS = 48 * 60 * 60 * 1000;
+  const completados = DB.agenda
+    .filter(v => v.estado === 'completado')
+    .map(v => {
+      const ms = v.completadoEn ? ahora - new Date(v.completadoEn).getTime() : 0;
+      const hRestantes = v.completadoEn ? Math.max(0, Math.ceil((LIMITE_MS - ms) / 3600000)) : null;
+      return { ...v, _hRestantes: hRestantes };
+    })
+    .sort((a,b) => (b.completadoEn||'').localeCompare(a.completadoEn||''));
   const el = document.getElementById('agenda-finalizados-list');
   if (!el) return;
   if (!completados.length) {
     el.innerHTML = '<div class="empty-state"><p>Sin viajes finalizados.</p></div>';
     return;
   }
-  el.innerHTML = completados.map(_buildAgendaCard).join('');
+  el.innerHTML = completados.map(v => {
+    const cardHtml = _buildAgendaCard(v);
+    const badge = v._hRestantes !== null
+      ? `<div style="font-size:.72rem;color:var(--text-muted);text-align:right;margin-top:-.5rem;margin-bottom:.5rem">
+           🕐 Se eliminará en ${v._hRestantes}h
+         </div>`
+      : '';
+    return cardHtml.replace('</div>`', `${badge}</div>\``);
+  }).join('').replace(/`$/,'');
+  // Forma más simple: insertar el badge como texto después del card
+  el.innerHTML = completados.map(v => {
+    const badge = v._hRestantes !== null
+      ? `<div style="font-size:.72rem;color:var(--text-muted);margin-top:-.75rem;margin-bottom:.25rem;text-align:right;padding-right:.25rem">🕐 Se eliminará en ${v._hRestantes}h</div>`
+      : '';
+    return _buildAgendaCard(v) + badge;
+  }).join('');
 }
 
 function openModalAgenda() {
@@ -2922,7 +2970,8 @@ async function _actualizarEstadoViaje(id, estado) {
   const agenda = [...DB.agenda];
   const idx = agenda.findIndex(v => v.id === id);
   if (idx === -1) return;
-  agenda[idx] = { ...agenda[idx], estado };
+  const extra = estado === 'completado' ? { completadoEn: new Date().toISOString() } : {};
+  agenda[idx] = { ...agenda[idx], estado, ...extra };
   // Actualizar cache LOCAL de inmediato para que la UI refleje el cambio sin esperar Firestore
   _cache.agenda = agenda;
   // Refrescar contenedor de tarjetas del chofer si está visible
