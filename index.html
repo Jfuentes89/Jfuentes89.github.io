@@ -2576,10 +2576,12 @@ function showDetalle(id) {
     </div>`;
 
   document.getElementById('modal-share-btn').onclick = () => shareWhatsApp(id);
+  const editBtn = document.getElementById('modal-edit-btn');
   if (DB.sesion.rol === 'chofer') {
-    document.getElementById('modal-edit-btn').onclick = () => openEditReporteChofer(id);
+    editBtn.style.display = 'none';
   } else {
-    document.getElementById('modal-edit-btn').onclick = () => openEditReporte(id);
+    editBtn.style.display = '';
+    editBtn.onclick = () => openEditReporte(id);
   }
   openModal('modal-detalle');
 }
