@@ -1,12 +1,15 @@
 <!DOCTYPE html>
 <html lang="es" data-theme="light">
+
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Transportes Melgar — Sistema de Gestión</title>
 
   <!-- Fuentes -->
-  <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&display=swap" rel="stylesheet">
+  <link
+    href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&display=swap"
+    rel="stylesheet">
 
   <!-- Librerías PDF -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
@@ -16,1055 +19,1239 @@
 
 
 
-  
+
   <link rel="stylesheet" href="styles.css">
 </head>
+
 <body>
 
-<!-- ══════════════════════════════════════════
+  <!-- ══════════════════════════════════════════
      PANTALLA DE LOGIN
 ══════════════════════════════════════════ -->
-<div id="login-screen">
-  <div class="login-card">
-    <div class="login-logo">
-      <h1>MELGAR</h1>
-      <p>Transportes · Sistema de Gestión</p>
-    </div>
-    <div class="form-group">
-      <label>Usuario</label>
-      <input type="text" id="login-user" placeholder="Ingresa tu usuario" autocomplete="username">
-    </div>
-    <div class="form-group">
-      <label>Contraseña</label>
-      <input type="password" id="login-pass" placeholder="••••••••" autocomplete="current-password">
-    </div>
-    <button class="btn btn-primary btn-full" id="login-btn" style="margin-top:.5rem" onclick="doLogin()">
-      Iniciar Sesión
-    </button>
-    <p style="text-align:center;font-size:.72rem;color:var(--text-muted);margin-top:1rem;letter-spacing:.5px">by DrivySystem</p>
-
-  </div>
-</div>
-
-<!-- ══════════════════════════════════════════
-     APLICACIÓN PRINCIPAL
-══════════════════════════════════════════ -->
-<div id="app">
-
-  <!-- Barra superior móvil -->
-  <div class="mobile-topbar">
-    <button class="hamburger" onclick="toggleSidebar()" aria-label="Menú">
-      <svg width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-        <line x1="3" y1="6"  x2="21" y2="6"/>
-        <line x1="3" y1="12" x2="21" y2="12"/>
-        <line x1="3" y1="18" x2="21" y2="18"/>
-      </svg>
-    </button>
-    <h2>MELGAR</h2>
-    <div class="mobile-topbar-right">
-      <button class="btn-icon" onclick="toggleTheme()" title="Cambiar tema" style="padding:.4rem">
-        <svg width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-          <circle cx="12" cy="12" r="5"/>
-          <line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/>
-          <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/>
-          <line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/>
-          <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
-        </svg>
-      </button>
-      <div class="avatar" id="user-avatar-mobile" style="width:30px;height:30px;font-size:.85rem;cursor:pointer" onclick="toggleSidebar()">A</div>
-    </div>
-  </div>
-
-  <!-- Overlay sidebar móvil -->
-  <div class="sidebar-overlay" id="sidebar-overlay" onclick="toggleSidebar()"></div>
-
-  <div class="app-layout">
-
-    <!-- ─────────────────── SIDEBAR ─────────────────── -->
-    <aside class="sidebar" id="sidebar">
-      <div class="sidebar-brand">
-        <h2>MELGAR</h2>
-        <span>Transportes</span>
-      </div>
-
-      <div class="sidebar-user">
-        <div class="avatar" id="user-avatar">A</div>
-        <div class="sidebar-user-info">
-          <strong id="user-name-display">Admin</strong>
-          <span id="user-role-display">Administrador</span>
-        </div>
-      </div>
-
-      <nav class="sidebar-nav">
-        <div class="nav-section">Principal</div>
-
-        <div class="nav-item active" onclick="navigate('dashboard')">
-          <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-            <rect x="3" y="3"   width="7" height="7" rx="1"/>
-            <rect x="14" y="3"  width="7" height="7" rx="1"/>
-            <rect x="3" y="14"  width="7" height="7" rx="1"/>
-            <rect x="14" y="14" width="7" height="7" rx="1"/>
-          </svg>
-          Dashboard
-        </div>
-
-        <div class="nav-item" onclick="navigate('nuevo-reporte')">
-          <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-            <circle cx="12" cy="12" r="10"/>
-            <line x1="12" y1="8"  x2="12" y2="16"/>
-            <line x1="8"  y1="12" x2="16" y2="12"/>
-          </svg>
-          Nuevo Reporte
-        </div>
-
-        <div class="nav-item" onclick="navigate('historial')">
-          <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-            <polyline points="14 2 14 8 20 8"/>
-            <line x1="16" y1="13" x2="8" y2="13"/>
-            <line x1="16" y1="17" x2="8" y2="17"/>
-            <polyline points="10 9 9 9 8 9"/>
-          </svg>
-          Historial
-        </div>
-
-        <div class="nav-item" id="nav-stats" onclick="navigate('stats')">
-          <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-            <line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/>
-            <line x1="6"  y1="20" x2="6"  y2="14"/><line x1="2" y1="20" x2="22" y2="20"/>
-          </svg>
-          Estadísticas
-        </div>
-
-        <!-- Solo visible para admin -->
-        <div class="nav-item" id="nav-agenda" onclick="navigate('agenda')" style="display:none">
-          <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-            <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
-            <line x1="16" y1="2" x2="16" y2="6"/>
-            <line x1="8"  y1="2" x2="8"  y2="6"/>
-            <line x1="3"  y1="10" x2="21" y2="10"/>
-          </svg>
-          Agenda de Viajes
-        </div>
-
-        <div class="nav-item" id="nav-admin" onclick="navigate('admin')" style="display:none">
-          <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-            <path d="M12 2L2 7l10 5 10-5-10-5z"/>
-            <path d="M2 17l10 5 10-5"/>
-            <path d="M2 12l10 5 10-5"/>
-          </svg>
-          Administración
-        </div>
-
-      </nav>
-
-      <div class="sidebar-footer">
-        <button class="btn-icon" onclick="toggleTheme()"
-          style="flex:1;justify-content:center;gap:.5rem;font-size:.82rem;color:var(--text-secondary)">
-          <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-            <circle cx="12" cy="12" r="5"/>
-            <line x1="12" y1="1"     x2="12" y2="3"/>
-            <line x1="12" y1="21"    x2="12" y2="23"/>
-            <line x1="4.22" y1="4.22"   x2="5.64" y2="5.64"/>
-            <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/>
-            <line x1="1"  y1="12" x2="3"  y2="12"/>
-            <line x1="21" y1="12" x2="23" y2="12"/>
-            <line x1="4.22" y1="19.78"  x2="5.64" y2="18.36"/>
-            <line x1="18.36" y1="5.64"  x2="19.78" y2="4.22"/>
-          </svg>
-          Tema
-        </button>
-
-        <button class="btn-icon" onclick="doLogout()"
-          style="flex:1;justify-content:center;gap:.5rem;font-size:.82rem;color:var(--danger)">
-          <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
-            <polyline points="16 17 21 12 16 7"/>
-            <line x1="21" y1="12" x2="9" y2="12"/>
-          </svg>
-          Salir
-        </button>
-      </div>
-    </aside>
-
-    <!-- ─────────────────── CONTENIDO PRINCIPAL ─────────────────── -->
-    <main class="main-content">
-
-      <!-- ══ DASHBOARD ══ -->
-      <div class="page active" id="page-dashboard">
-        <div class="page-header">
-          <div>
-            <h1>Dashboard</h1>
-            <p id="dash-greeting">Bienvenido de vuelta</p>
-          </div>
-          <div style="display:flex;flex-direction:column;align-items:flex-end;gap:.2rem">
-            <div id="dash-clock" style="font-family:var(--font-title);font-size:1.8rem;letter-spacing:2px;color:var(--accent);line-height:1">00:00:00</div>
-            <div id="dash-date" style="font-size:.78rem;color:var(--text-muted)"></div>
-          </div>
-        </div>
-
-        <div id="viajes-asignados-container"></div>
-        <div class="metric-grid" id="metrics-grid"></div>
-
-        <div id="admin-agenda-resumen"></div>
-        <div class="card profit-bar-wrap">
-          <div class="profit-bar-header">
-            <span style="font-size:.82rem;font-weight:600;color:var(--text-secondary)">RENTABILIDAD GENERAL</span>
-            <span id="profit-pct" style="font-family:var(--font-title);font-size:1.1rem;color:var(--accent)">0%</span>
-          </div>
-          <div class="profit-bar-track">
-            <div class="profit-bar-fill" id="profit-bar" style="width:0%"></div>
-          </div>
-          <div style="display:flex;justify-content:space-between;margin-top:.4rem;font-size:.72rem;color:var(--text-muted)">
-            <span>0% — Pérdida</span><span>100% — Ganancia total</span>
-          </div>
-        </div>
-
-        <div class="card">
-          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem">
-            <span style="font-size:.82rem;font-weight:700;color:var(--text-secondary);text-transform:uppercase;letter-spacing:.8px">
-              Actividad Reciente
-            </span>
-            <button class="btn btn-sm btn-secondary" onclick="navigate('historial')">Ver todo</button>
-          </div>
-          <div class="activity-list" id="activity-list">
-            <div class="empty-state"><p>Sin registros aún</p></div>
-          </div>
-        </div>
-      </div>
-
-      <!-- ══ NUEVO REPORTE ══ -->
-      <div class="page" id="page-nuevo-reporte">
-        <div class="page-header">
-          <div><h1>Nuevo Reporte</h1><p>Registra un nuevo viaje</p></div>
-        </div>
-
-        <div class="card">
-          <!-- Datos generales -->
-          <div class="form-grid">
-            <div class="form-group">
-              <label>Fecha del viaje</label>
-              <input type="date" id="r-fecha">
-            </div>
-            <div class="form-group" id="r-chofer-group">
-              <label>Chofer</label>
-              <select id="r-chofer"></select>
-            </div>
-            <div class="form-group">
-              <label>Unidad</label>
-              <select id="r-unidad"></select>
-            </div>
-            <div class="form-group">
-              <label>Cliente</label>
-              <input type="text" id="r-cliente" placeholder="">
-            </div>
-            <div class="form-group">
-              <label>Destino</label>
-              <input type="text" id="r-destino" placeholder="">
-            </div>
-          </div>
-
-          <!-- Sección Ingresos -->
-          <div class="form-section">
-            <div class="form-section-title">
-              <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-                <polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/>
-                <polyline points="17 6 23 6 23 12"/>
-              </svg>
-              Ingresos
-            </div>
-
-            <div class="form-group" style="max-width:280px">
-              <label>Precio de viaje</label>
-              <input type="number" id="r-flete" placeholder="$0.00" min="0" step="0.01" oninput="calcLive()">
-            </div>
-
-            <div style="margin-top:.75rem">
-              <div class="dynamic-items" id="ingresos-extra"></div>
-              <button class="btn btn-secondary btn-sm" style="margin-top:.75rem" onclick="addIngreso()">
-                <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-                  <circle cx="12" cy="12" r="10"/>
-                  <line x1="12" y1="8"  x2="12" y2="16"/>
-                  <line x1="8"  y1="12" x2="16" y2="12"/>
-                </svg>
-                Añadir Ingreso Extra
-              </button>
-            </div>
-          </div>
-
-          <!-- Sección Gastos -->
-          <div class="form-section">
-            <div class="form-section-title">
-              <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-                <polyline points="23 18 13.5 8.5 8.5 13.5 1 6"/>
-                <polyline points="17 18 23 18 23 12"/>
-              </svg>
-              Gastos
-            </div>
-
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:.75rem;margin-bottom:.75rem">
-              <div class="form-group">
-                <label>Diesel</label>
-                <input type="number" id="g-diesel" placeholder="$0.00" min="0" step="0.01" oninput="calcLive()">
-              </div>
-              <div class="form-group">
-                <label>Pago de chófer</label>
-                <input type="number" id="g-pago-chofer" placeholder="$0.00" min="0" step="0.01" oninput="calcLive()">
-              </div>
-            </div>
-
-            <div class="dynamic-items" id="gastos-list"></div>
-
-            <button class="btn btn-secondary btn-sm" style="margin-top:.5rem" onclick="addGasto('')">
-              <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
-              Otro gasto
-            </button>
-          </div>
-
-          <!-- Calculadora en vivo -->
-          <div class="live-calc">
-            <div class="calc-item">
-              <label>Total Ingresos</label>
-              <span class="positive" id="calc-ingresos">$0.00</span>
-            </div>
-            <div class="calc-item">
-              <label>Total Gastos</label>
-              <span class="negative" id="calc-gastos">$0.00</span>
-            </div>
-            <div class="calc-item">
-              <label>Utilidad Neta</label>
-              <span id="calc-utilidad">$0.00</span>
-            </div>
-          </div>
-
-          <div class="form-group" style="margin-top:1rem">
-            <label>Entregado a <span style="color:var(--danger)">*</span></label>
-            <input type="text" id="r-entregado" placeholder="">
-          </div>
-
-          <div style="display:flex;gap:.75rem;justify-content:flex-end;margin-top:1.5rem;flex-wrap:wrap">
-            <button class="btn btn-secondary" onclick="resetForm()">Limpiar</button>
-            <button class="btn btn-primary"   onclick="saveReporte()">
-              <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-                <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
-                <polyline points="17 21 17 13 7 13 7 21"/>
-                <polyline points="7 3 7 8 15 8"/>
-              </svg>
-              Guardar Reporte
-            </button>
-          </div>
-        </div>
-      </div>
-
-      <!-- ══ HISTORIAL ══ -->
-      <div class="page" id="page-historial">
-        <div class="page-header">
-          <div><h1>Historial</h1><p>Todos los viajes registrados</p></div>
-          <button class="btn btn-primary btn-sm" id="btn-export-pdf" onclick="exportAllPDF()">
-            <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-              <polyline points="7 10 12 15 17 10"/>
-              <line x1="12" y1="15" x2="12" y2="3"/>
-            </svg>
-            Exportar PDF
-          </button>
-        </div>
-
-        <!-- Filtros -->
-        <div class="card" id="filtros-card" style="padding:1rem">
-          <div class="filters-bar">
-            <input type="date" id="f-desde" placeholder="Desde" onchange="renderHistorial()">
-            <input type="date" id="f-hasta" placeholder="Hasta" onchange="renderHistorial()">
-            <select id="f-unidad" class="admin-filter" onchange="renderHistorial()">
-              <option value="">Todas las unidades</option>
-            </select>
-            <select id="f-chofer" class="admin-filter" onchange="renderHistorial()">
-              <option value="">Todos los choferes</option>
-            </select>
-            <button class="btn btn-secondary btn-sm admin-filter" onclick="clearFilters()">Limpiar</button>
-          </div>
-        </div>
-
-        <!-- Tabla -->
-        <div class="table-wrap" style="margin-top:1rem">
-          <div id="historial-tbody" style="display:flex;flex-direction:column;gap:.6rem;margin-top:.25rem"></div>
-        </div>
-
-        <div id="historial-empty" class="empty-state" style="display:none">
-          <svg fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
-            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-            <polyline points="14 2 14 8 20 8"/>
-          </svg>
-          <strong>Sin registros</strong>
-          <p>No hay viajes que coincidan con los filtros.</p>
-        </div>
-      </div>
-
-      <!-- ══ ADMINISTRACIÓN ══ -->
-      <!-- ════════════════ AGENDA ════════════════ -->
-      <div class="page" id="page-agenda">
-        <div class="page-header">
-          <div>
-            <h1>Agenda de Viajes</h1>
-            <p id="agenda-subtitle">Programa y gestiona los viajes asignados</p>
-          </div>
-          <button class="btn btn-primary" onclick="openModalAgenda()">
-            <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-              <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/>
-            </svg>
-            Agendar Viaje
-          </button>
-        </div>
-        <div style="display:flex;flex-direction:column;gap:1.75rem;margin-top:1rem">
-          <div id="agenda-sec-en-ruta"></div>
-          <div id="agenda-sec-hoy"></div>
-          <div id="agenda-sec-manana"></div>
-          <div id="agenda-sec-resto"></div>
-        </div>
-        <div style="margin-top:1.5rem;text-align:center">
-          <button class="btn btn-secondary" onclick="openModal('modal-finalizados')">
-            <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>
-            Ver Viajes Finalizados
-          </button>
-        </div>
-      </div>
-
-      <!-- ══ ESTADÍSTICAS ══ -->
-      <div class="page" id="page-stats">
-        <div class="page-header">
-          <div>
-            <h1>Estadísticas</h1>
-            <p id="stats-subtitle">Análisis de rendimiento</p>
-          </div>
-          <div style="display:flex;gap:.5rem;align-items:center">
-            <select id="stats-anio" class="admin-filter" onchange="renderStats()" style="width:auto"></select>
-            <select id="stats-mes"  class="admin-filter" onchange="renderStats()" style="width:auto"></select>
-          </div>
-        </div>
-        <div id="stats-container" style="display:flex;flex-direction:column;gap:1.5rem;margin-top:1rem"></div>
-      </div>
-
-      <div class="page" id="page-admin">
-        <div class="page-header">
-          <div><h1>Administración</h1><p>Gestión de personal y flota</p></div>
-        </div>
-
-        <div class="admin-grid">
-          <!-- Choferes -->
-          <div class="admin-card">
-            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem">
-              <h3 style="margin-bottom:0">
-                <svg width="18" height="18" fill="none" stroke="var(--accent)" stroke-width="2" viewBox="0 0 24 24">
-                  <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
-                  <circle cx="9" cy="7" r="4"/>
-                  <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
-                  <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
-                </svg>
-                Choferes
-              </h3>
-              <button class="btn btn-primary btn-sm" onclick="openModal('modal-nuevo-chofer')">
-                <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
-                Nuevo Chofer
-              </button>
-            </div>
-            <div class="admin-list" id="choferes-list"></div>
-          </div>
-
-          <!-- Unidades -->
-          <div class="admin-card">
-            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem">
-              <h3 style="margin-bottom:0">
-                <svg width="18" height="18" fill="none" stroke="var(--accent)" stroke-width="2" viewBox="0 0 24 24">
-                  <rect x="1" y="3" width="15" height="13" rx="2"/>
-                  <polygon points="16 8 20 8 23 11 23 16 16 16 16 8"/>
-                  <circle cx="5.5"  cy="18.5" r="2.5"/>
-                  <circle cx="18.5" cy="18.5" r="2.5"/>
-                </svg>
-                Unidades
-              </h3>
-              <button class="btn btn-primary btn-sm" onclick="openModal('modal-nueva-unidad')">
-                <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
-                Nueva Unidad
-              </button>
-            </div>
-            <div class="admin-list" id="unidades-list"></div>
-          </div>
-        </div>
-
-      <!-- ══ USUARIO ══ -->
-      <div class="page" id="page-usuario">
-        <div class="page-header">
-          <div><h1>Mi Cuenta</h1><p>Perfil y configuración</p></div>
-        </div>
-        <div style="display:flex;flex-direction:column;gap:1rem;max-width:480px;width:100%">
-
-          <!-- ── Perfil ── -->
-          <div class="card" style="padding:1.5rem">
-            <div style="display:flex;align-items:center;gap:1.1rem;padding-bottom:1.1rem;border-bottom:1px solid var(--border);margin-bottom:1.1rem">
-              <div id="usuario-avatar-grande" style="width:64px;height:64px;border-radius:50%;background:linear-gradient(135deg,#6B35B8,#8A50DC);display:flex;align-items:center;justify-content:center;font-family:var(--font-title);font-size:2rem;color:#fff;flex-shrink:0;box-shadow:0 4px 18px rgba(138,80,220,.45)">?</div>
-              <div>
-                <div id="usuario-nombre-grande" style="font-weight:700;font-size:1.2rem;line-height:1.25">—</div>
-                <div id="usuario-rol-grande"    style="font-size:.7rem;color:var(--accent);font-weight:700;text-transform:uppercase;letter-spacing:1px;margin-top:.25rem">—</div>
-              </div>
-            </div>
-            <div style="display:flex;flex-direction:column;gap:.5rem">
-              <div style="display:flex;justify-content:space-between;align-items:center;padding:.6rem .85rem;background:var(--bg-input);border:1px solid var(--border);border-radius:var(--radius-sm)">
-                <span style="font-size:.7rem;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.7px">Usuario</span>
-                <span id="usuario-username" style="font-size:.9rem;font-weight:600">—</span>
-              </div>
-              <div style="display:flex;justify-content:space-between;align-items:center;padding:.6rem .85rem;background:var(--bg-input);border:1px solid var(--border);border-radius:var(--radius-sm)">
-                <span style="font-size:.7rem;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.7px">Rol</span>
-                <span id="usuario-tipo" style="font-size:.9rem;font-weight:600;color:var(--accent)">—</span>
-              </div>
-            </div>
-          </div>
-
-          <!-- ── Cambiar contraseña ── -->
-          <div class="card">
-            <div style="display:flex;align-items:center;gap:.6rem;margin-bottom:1rem">
-              <svg width="16" height="16" fill="none" stroke="var(--accent)" stroke-width="2" viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-              <h3 style="font-family:var(--font-title);letter-spacing:1.5px;font-size:1.1rem">Cambiar Contraseña</h3>
-            </div>
-            <div style="display:flex;flex-direction:column;gap:.8rem">
-              <div class="form-group">
-                <label>Contraseña actual</label>
-                <input type="password" id="cp-actual" placeholder="••••••••">
-              </div>
-              <div class="form-group">
-                <label>Nueva contraseña</label>
-                <input type="password" id="cp-nueva" placeholder="••••••••">
-              </div>
-              <div class="form-group">
-                <label>Confirmar nueva contraseña</label>
-                <input type="password" id="cp-confirmar" placeholder="••••••••">
-              </div>
-              <button class="btn btn-primary btn-full" onclick="cambiarPassword()">Guardar contraseña</button>
-            </div>
-          </div>
-
-          <!-- ── Preferencias ── -->
-          <div class="card" style="padding:1rem 1.1rem">
-            <p style="font-size:.68rem;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.8px;margin-bottom:.6rem">Preferencias</p>
-            <button class="btn btn-secondary btn-full" style="justify-content:flex-start;gap:.85rem;border-radius:12px" onclick="toggleTheme()">
-              <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
-              Cambiar tema (claro / oscuro)
-            </button>
-          </div>
-
-          <!-- ── Cerrar sesión ── -->
-          <button class="btn btn-danger btn-full" style="border-radius:14px;gap:.85rem" onclick="doLogout()">
-            <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
-            Cerrar sesión
-          </button>
-
-        </div>
-      </div>
-      <!-- ══ CAMBIAR CONTRASEÑA ══ -->
-
-
-    </main>
-  </div><!-- /.app-layout -->
-
-  <!-- BOTTOM NAVIGATION — Solo móvil -->
-  <nav class="bottom-nav" id="bottom-nav">
-    <div class="bottom-nav-items">
-      <button class="bottom-nav-item active" id="bnav-dashboard" onclick="navigate('dashboard')">
-        <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
-        <span>Inicio</span>
-      </button>
-      <button class="bottom-nav-item" id="bnav-historial" onclick="navigate('historial')">
-        <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
-        <span>Historial</span>
-      </button>
-      <button class="bottom-nav-item" id="bnav-agenda" style="display:none" onclick="navigate('agenda')">
-        <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
-        <span>Agenda</span>
-      </button>
-      <button class="bottom-nav-item" id="bnav-stats" onclick="navigate('stats')">
-        <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/><line x1="2" y1="20" x2="22" y2="20"/></svg>
-        <span>Stats</span>
-      </button>
-      <button class="bottom-nav-item" id="bnav-admin" style="display:none" onclick="navigate('admin')">
-        <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
-        <span>Admin</span>
-      </button>
-
-    </div>
-  </nav>
-
-</div><!-- /#app -->
-
-
-<!-- ══════════════════════════════════════════
-     MODAL — Nuevo Chofer
-══════════════════════════════════════════ -->
-<div class="modal-overlay" id="modal-nuevo-chofer">
-  <div class="modal" style="max-width:420px">
-    <div class="modal-header">
-      <h3>Nuevo Chofer</h3>
-      <button class="btn-icon" onclick="closeModal('modal-nuevo-chofer')">
-        <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-          <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
-        </svg>
-      </button>
-    </div>
-    <div class="modal-body" style="display:flex;flex-direction:column;gap:.9rem">
-      <div class="form-group">
-        <label>Nombre completo</label>
-        <input type="text" id="new-chofer-nombre" placeholder="">
+  <div id="login-screen">
+    <div class="login-card">
+      <div class="login-logo">
+        <h1>MELGAR</h1>
+        <p>Transportes · Sistema de Gestión</p>
       </div>
       <div class="form-group">
-        <label>Usuario (login)</label>
-        <input type="text" id="new-chofer-user" placeholder="">
+        <label>Usuario</label>
+        <input type="text" id="login-user" placeholder="Ingresa tu usuario" autocomplete="username">
       </div>
       <div class="form-group">
         <label>Contraseña</label>
-        <input type="password" id="new-chofer-pass" placeholder="••••••••">
+        <input type="password" id="login-pass" placeholder="••••••••" autocomplete="current-password">
       </div>
-      <div class="form-group">
-        <label>Rol</label>
-        <select id="new-chofer-rol">
-          <option value="chofer">Chofer</option>
-          <option value="admin">Administrador</option>
-        </select>
-      </div>
-    </div>
-    <div class="modal-footer">
-      <button class="btn btn-secondary" onclick="closeModal('modal-nuevo-chofer')">Cancelar</button>
-      <button class="btn btn-primary" onclick="addChofer()">Guardar Chofer</button>
+      <button class="btn btn-primary btn-full" id="login-btn" style="margin-top:.5rem" onclick="doLogin()">
+        Iniciar Sesión
+      </button>
+      <p style="text-align:center;font-size:.72rem;color:var(--text-muted);margin-top:1rem;letter-spacing:.5px">by
+        DrivySystem</p>
+
     </div>
   </div>
-</div>
 
-<!-- ══════════════════════════════════════════
+  <!-- ══════════════════════════════════════════
+     APLICACIÓN PRINCIPAL
+══════════════════════════════════════════ -->
+  <div id="app">
+
+    <!-- Barra superior móvil -->
+    <div class="mobile-topbar">
+      <div class="mobile-topbar-left">
+        <div class="topbar-logo">M</div>
+        <div>
+          <h2>MELGAR</h2>
+          <p class="topbar-sub">Transportes</p>
+        </div>
+      </div>
+      <button class="topbar-avatar-btn" id="user-avatar-mobile" onclick="openUserPanel()" aria-label="Mi cuenta">A</button>
+    </div>
+
+    <!-- Stubs para compatibilidad JS -->
+    <span id="sidebar-overlay" style="display:none"></span>
+
+    <div class="app-layout">
+
+      <!-- SIDEBAR (oculto — solo móvil) -->
+      <aside class="sidebar" id="sidebar" style="display:none">
+        <div class="sidebar-brand">
+          <h2>MELGAR</h2>
+          <span>Transportes</span>
+        </div>
+
+        <div class="sidebar-user">
+          <div class="avatar" id="user-avatar">A</div>
+          <div class="sidebar-user-info">
+            <strong id="user-name-display">Admin</strong>
+            <span id="user-role-display">Administrador</span>
+          </div>
+        </div>
+
+        <nav class="sidebar-nav">
+          <div class="nav-section">Principal</div>
+
+          <div class="nav-item active" onclick="navigate('dashboard')">
+            <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <rect x="3" y="3" width="7" height="7" rx="1" />
+              <rect x="14" y="3" width="7" height="7" rx="1" />
+              <rect x="3" y="14" width="7" height="7" rx="1" />
+              <rect x="14" y="14" width="7" height="7" rx="1" />
+            </svg>
+            Dashboard
+          </div>
+
+          <div class="nav-item" onclick="navigate('nuevo-reporte')">
+            <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <circle cx="12" cy="12" r="10" />
+              <line x1="12" y1="8" x2="12" y2="16" />
+              <line x1="8" y1="12" x2="16" y2="12" />
+            </svg>
+            Nuevo Reporte
+          </div>
+
+          <div class="nav-item" onclick="navigate('historial')">
+            <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+              <polyline points="14 2 14 8 20 8" />
+              <line x1="16" y1="13" x2="8" y2="13" />
+              <line x1="16" y1="17" x2="8" y2="17" />
+              <polyline points="10 9 9 9 8 9" />
+            </svg>
+            Historial
+          </div>
+
+          <div class="nav-item" id="nav-stats" onclick="navigate('stats')">
+            <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <line x1="18" y1="20" x2="18" y2="10" />
+              <line x1="12" y1="20" x2="12" y2="4" />
+              <line x1="6" y1="20" x2="6" y2="14" />
+              <line x1="2" y1="20" x2="22" y2="20" />
+            </svg>
+            Estadísticas
+          </div>
+
+          <!-- Solo visible para admin -->
+          <div class="nav-item" id="nav-agenda" onclick="navigate('agenda')" style="display:none">
+            <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+              <line x1="16" y1="2" x2="16" y2="6" />
+              <line x1="8" y1="2" x2="8" y2="6" />
+              <line x1="3" y1="10" x2="21" y2="10" />
+            </svg>
+            Agenda de Viajes
+          </div>
+
+          <div class="nav-item" id="nav-admin" onclick="navigate('admin')" style="display:none">
+            <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <path d="M12 2L2 7l10 5 10-5-10-5z" />
+              <path d="M2 17l10 5 10-5" />
+              <path d="M2 12l10 5 10-5" />
+            </svg>
+            Administración
+          </div>
+
+        </nav>
+
+        <div class="sidebar-footer">
+          <button class="btn-icon" onclick="toggleTheme()"
+            style="flex:1;justify-content:center;gap:.5rem;font-size:.82rem;color:var(--text-secondary)">
+            <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <circle cx="12" cy="12" r="5" />
+              <line x1="12" y1="1" x2="12" y2="3" />
+              <line x1="12" y1="21" x2="12" y2="23" />
+              <line x1="4.22" y1="4.22" x2="5.64" y2="5.64" />
+              <line x1="18.36" y1="18.36" x2="19.78" y2="19.78" />
+              <line x1="1" y1="12" x2="3" y2="12" />
+              <line x1="21" y1="12" x2="23" y2="12" />
+              <line x1="4.22" y1="19.78" x2="5.64" y2="18.36" />
+              <line x1="18.36" y1="5.64" x2="19.78" y2="4.22" />
+            </svg>
+            Tema
+          </button>
+
+          <button class="btn-icon" onclick="doLogout()"
+            style="flex:1;justify-content:center;gap:.5rem;font-size:.82rem;color:var(--danger)">
+            <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+              <polyline points="16 17 21 12 16 7" />
+              <line x1="21" y1="12" x2="9" y2="12" />
+            </svg>
+            Salir
+          </button>
+        </div>
+      </aside>
+
+      <!-- ─────────────────── CONTENIDO PRINCIPAL ─────────────────── -->
+      <main class="main-content">
+
+        <!-- ══ DASHBOARD ══ -->
+        <div class="page active" id="page-dashboard">
+          <div class="page-header">
+            <div>
+              <h1>Dashboard</h1>
+              <p id="dash-greeting">Bienvenido de vuelta</p>
+            </div>
+            <div style="display:flex;flex-direction:column;align-items:flex-end;gap:.2rem">
+              <div id="dash-clock"
+                style="font-family:var(--font-title);font-size:1.8rem;letter-spacing:2px;color:var(--accent);line-height:1">
+                00:00:00</div>
+              <div id="dash-date" style="font-size:.78rem;color:var(--text-muted)"></div>
+            </div>
+          </div>
+
+          <div id="viajes-asignados-container"></div>
+          <div class="metric-grid" id="metrics-grid"></div>
+
+          <div id="admin-agenda-resumen"></div>
+          <div class="card profit-bar-wrap">
+            <div class="profit-bar-header">
+              <span style="font-size:.82rem;font-weight:600;color:var(--text-secondary)">RENTABILIDAD GENERAL</span>
+              <span id="profit-pct" style="font-family:var(--font-title);font-size:1.1rem;color:var(--accent)">0%</span>
+            </div>
+            <div class="profit-bar-track">
+              <div class="profit-bar-fill" id="profit-bar" style="width:0%"></div>
+            </div>
+            <div
+              style="display:flex;justify-content:space-between;margin-top:.4rem;font-size:.72rem;color:var(--text-muted)">
+              <span>0% — Pérdida</span><span>100% — Ganancia total</span>
+            </div>
+          </div>
+
+          <div class="card">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem">
+              <span
+                style="font-size:.82rem;font-weight:700;color:var(--text-secondary);text-transform:uppercase;letter-spacing:.8px">
+                Actividad Reciente
+              </span>
+              <button class="btn btn-sm btn-secondary" onclick="navigate('historial')">Ver todo</button>
+            </div>
+            <div class="activity-list" id="activity-list">
+              <div class="empty-state">
+                <p>Sin registros aún</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ══ NUEVO REPORTE ══ -->
+        <div class="page" id="page-nuevo-reporte">
+          <div class="page-header">
+            <div>
+              <h1>Nuevo Reporte</h1>
+              <p>Registra un nuevo viaje</p>
+            </div>
+          </div>
+
+          <div class="card">
+            <!-- Datos generales -->
+            <div class="form-grid">
+              <div class="form-group">
+                <label>Fecha del viaje</label>
+                <input type="date" id="r-fecha">
+              </div>
+              <div class="form-group" id="r-chofer-group">
+                <label>Chofer</label>
+                <select id="r-chofer"></select>
+              </div>
+              <div class="form-group">
+                <label>Unidad</label>
+                <select id="r-unidad"></select>
+              </div>
+              <div class="form-group">
+                <label>Cliente</label>
+                <input type="text" id="r-cliente" placeholder="">
+              </div>
+              <div class="form-group">
+                <label>Destino</label>
+                <input type="text" id="r-destino" placeholder="">
+              </div>
+            </div>
+
+            <!-- Sección Ingresos -->
+            <div class="form-section">
+              <div class="form-section-title">
+                <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                  <polyline points="23 6 13.5 15.5 8.5 10.5 1 18" />
+                  <polyline points="17 6 23 6 23 12" />
+                </svg>
+                Ingresos
+              </div>
+
+              <div class="form-group" style="max-width:280px">
+                <label>Precio de viaje</label>
+                <input type="number" id="r-flete" placeholder="$0.00" min="0" step="0.01" oninput="calcLive()">
+              </div>
+
+              <div style="margin-top:.75rem">
+                <div class="dynamic-items" id="ingresos-extra"></div>
+                <button class="btn btn-secondary btn-sm" style="margin-top:.75rem" onclick="addIngreso()">
+                  <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                    <circle cx="12" cy="12" r="10" />
+                    <line x1="12" y1="8" x2="12" y2="16" />
+                    <line x1="8" y1="12" x2="16" y2="12" />
+                  </svg>
+                  Añadir Ingreso Extra
+                </button>
+              </div>
+            </div>
+
+            <!-- Sección Gastos -->
+            <div class="form-section">
+              <div class="form-section-title">
+                <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                  <polyline points="23 18 13.5 8.5 8.5 13.5 1 6" />
+                  <polyline points="17 18 23 18 23 12" />
+                </svg>
+                Gastos
+              </div>
+
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:.75rem;margin-bottom:.75rem">
+                <div class="form-group">
+                  <label>Diesel</label>
+                  <input type="number" id="g-diesel" placeholder="$0.00" min="0" step="0.01" oninput="calcLive()">
+                </div>
+                <div class="form-group">
+                  <label>Pago de chófer</label>
+                  <input type="number" id="g-pago-chofer" placeholder="$0.00" min="0" step="0.01" oninput="calcLive()">
+                </div>
+              </div>
+
+              <div class="dynamic-items" id="gastos-list"></div>
+
+              <button class="btn btn-secondary btn-sm" style="margin-top:.5rem" onclick="addGasto('')">
+                <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                  <circle cx="12" cy="12" r="10" />
+                  <line x1="12" y1="8" x2="12" y2="16" />
+                  <line x1="8" y1="12" x2="16" y2="12" />
+                </svg>
+                Otro gasto
+              </button>
+            </div>
+
+            <!-- Calculadora en vivo -->
+            <div class="live-calc">
+              <div class="calc-item">
+                <label>Total Ingresos</label>
+                <span class="positive" id="calc-ingresos">$0.00</span>
+              </div>
+              <div class="calc-item">
+                <label>Total Gastos</label>
+                <span class="negative" id="calc-gastos">$0.00</span>
+              </div>
+              <div class="calc-item">
+                <label>Utilidad Neta</label>
+                <span id="calc-utilidad">$0.00</span>
+              </div>
+            </div>
+
+            <div class="form-group" style="margin-top:1rem">
+              <label>Entregado a <span style="color:var(--danger)">*</span></label>
+              <input type="text" id="r-entregado" placeholder="">
+            </div>
+
+            <div style="display:flex;gap:.75rem;justify-content:flex-end;margin-top:1.5rem;flex-wrap:wrap">
+              <button class="btn btn-secondary" onclick="resetForm()">Limpiar</button>
+              <button class="btn btn-primary" onclick="saveReporte()">
+                <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                  <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
+                  <polyline points="17 21 17 13 7 13 7 21" />
+                  <polyline points="7 3 7 8 15 8" />
+                </svg>
+                Guardar Reporte
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- ══ HISTORIAL ══ -->
+        <div class="page" id="page-historial">
+          <div class="page-header">
+            <div>
+              <h1>Historial</h1>
+              <p>Todos los viajes registrados</p>
+            </div>
+            <button class="btn btn-primary btn-sm" id="btn-export-pdf" onclick="exportAllPDF()">
+              <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                <polyline points="7 10 12 15 17 10" />
+                <line x1="12" y1="15" x2="12" y2="3" />
+              </svg>
+              Exportar PDF
+            </button>
+          </div>
+
+          <!-- Filtros -->
+          <div class="card" id="filtros-card" style="padding:1rem">
+            <div class="filters-bar">
+              <input type="date" id="f-desde" placeholder="Desde" onchange="renderHistorial()">
+              <input type="date" id="f-hasta" placeholder="Hasta" onchange="renderHistorial()">
+              <select id="f-unidad" class="admin-filter" onchange="renderHistorial()">
+                <option value="">Todas las unidades</option>
+              </select>
+              <select id="f-chofer" class="admin-filter" onchange="renderHistorial()">
+                <option value="">Todos los choferes</option>
+              </select>
+              <button class="btn btn-secondary btn-sm admin-filter" onclick="clearFilters()">Limpiar</button>
+            </div>
+          </div>
+
+          <!-- Tabla -->
+          <div class="table-wrap" style="margin-top:1rem">
+            <div id="historial-tbody" style="display:flex;flex-direction:column;gap:.6rem;margin-top:.25rem"></div>
+          </div>
+
+          <div id="historial-empty" class="empty-state" style="display:none">
+            <svg fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+              <polyline points="14 2 14 8 20 8" />
+            </svg>
+            <strong>Sin registros</strong>
+            <p>No hay viajes que coincidan con los filtros.</p>
+          </div>
+        </div>
+
+        <!-- ══ ADMINISTRACIÓN ══ -->
+        <!-- ════════════════ AGENDA ════════════════ -->
+        <div class="page" id="page-agenda">
+          <div class="page-header">
+            <div>
+              <h1>Agenda de Viajes</h1>
+              <p id="agenda-subtitle">Programa y gestiona los viajes asignados</p>
+            </div>
+            <button class="btn btn-primary" onclick="openModalAgenda()">
+              <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                <circle cx="12" cy="12" r="10" />
+                <line x1="12" y1="8" x2="12" y2="16" />
+                <line x1="8" y1="12" x2="16" y2="12" />
+              </svg>
+              Agendar Viaje
+            </button>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:1.75rem;margin-top:1rem">
+            <div id="agenda-sec-en-ruta"></div>
+            <div id="agenda-sec-hoy"></div>
+            <div id="agenda-sec-manana"></div>
+            <div id="agenda-sec-resto"></div>
+          </div>
+          <div style="margin-top:1.5rem;text-align:center">
+            <button class="btn btn-secondary" onclick="openModal('modal-finalizados')">
+              <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                <polyline points="20 6 9 17 4 12" />
+              </svg>
+              Ver Viajes Finalizados
+            </button>
+          </div>
+        </div>
+
+        <!-- ══ ESTADÍSTICAS ══ -->
+        <div class="page" id="page-stats">
+          <div class="page-header">
+            <div>
+              <h1>Estadísticas</h1>
+              <p id="stats-subtitle">Análisis de rendimiento</p>
+            </div>
+            <div style="display:flex;gap:.5rem;align-items:center">
+              <select id="stats-anio" class="admin-filter" onchange="renderStats()" style="width:auto"></select>
+              <select id="stats-mes" class="admin-filter" onchange="renderStats()" style="width:auto"></select>
+            </div>
+          </div>
+          <div id="stats-container" style="display:flex;flex-direction:column;gap:1.5rem;margin-top:1rem"></div>
+        </div>
+
+        <div class="page" id="page-admin">
+          <div class="page-header">
+            <div>
+              <h1>Administración</h1>
+              <p>Gestión de personal y flota</p>
+            </div>
+          </div>
+
+          <div class="admin-grid">
+            <!-- Choferes -->
+            <div class="admin-card">
+              <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem">
+                <h3 style="margin-bottom:0">
+                  <svg width="18" height="18" fill="none" stroke="var(--accent)" stroke-width="2" viewBox="0 0 24 24">
+                    <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+                    <circle cx="9" cy="7" r="4" />
+                    <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+                    <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+                  </svg>
+                  Choferes
+                </h3>
+                <button class="btn btn-primary btn-sm" onclick="openModal('modal-nuevo-chofer')">
+                  <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                    <circle cx="12" cy="12" r="10" />
+                    <line x1="12" y1="8" x2="12" y2="16" />
+                    <line x1="8" y1="12" x2="16" y2="12" />
+                  </svg>
+                  Nuevo Chofer
+                </button>
+              </div>
+              <div class="admin-list" id="choferes-list"></div>
+            </div>
+
+            <!-- Unidades -->
+            <div class="admin-card">
+              <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem">
+                <h3 style="margin-bottom:0">
+                  <svg width="18" height="18" fill="none" stroke="var(--accent)" stroke-width="2" viewBox="0 0 24 24">
+                    <rect x="1" y="3" width="15" height="13" rx="2" />
+                    <polygon points="16 8 20 8 23 11 23 16 16 16 16 8" />
+                    <circle cx="5.5" cy="18.5" r="2.5" />
+                    <circle cx="18.5" cy="18.5" r="2.5" />
+                  </svg>
+                  Unidades
+                </h3>
+                <button class="btn btn-primary btn-sm" onclick="openModal('modal-nueva-unidad')">
+                  <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                    <circle cx="12" cy="12" r="10" />
+                    <line x1="12" y1="8" x2="12" y2="16" />
+                    <line x1="8" y1="12" x2="16" y2="12" />
+                  </svg>
+                  Nueva Unidad
+                </button>
+              </div>
+              <div class="admin-list" id="unidades-list"></div>
+            </div>
+          </div>
+        </div><!-- /.page#page-admin -->
+
+        <!-- ══ USUARIO ══ -->
+        <div class="page" id="page-usuario">
+            <div class="page-header">
+              <div>
+                <h1>Mi Cuenta</h1>
+                <p>Perfil y configuración</p>
+              </div>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:1rem;max-width:480px;width:100%">
+
+              <!-- ── Perfil ── -->
+              <div class="card" style="padding:1.5rem">
+                <div
+                  style="display:flex;align-items:center;gap:1.1rem;padding-bottom:1.1rem;border-bottom:1px solid var(--border);margin-bottom:1.1rem">
+                  <div id="usuario-avatar-grande"
+                    style="width:64px;height:64px;border-radius:50%;background:linear-gradient(135deg,var(--accent),var(--accent-2));display:flex;align-items:center;justify-content:center;font-family:var(--font-title);font-size:2rem;color:#fff;flex-shrink:0;box-shadow:0 4px 18px rgba(26,120,120,.40)">
+                    ?</div>
+                  <div>
+                    <div id="usuario-nombre-grande" style="font-weight:700;font-size:1.2rem;line-height:1.25">—</div>
+                    <div id="usuario-rol-grande"
+                      style="font-size:.7rem;color:var(--accent);font-weight:700;text-transform:uppercase;letter-spacing:1px;margin-top:.25rem">
+                      —</div>
+                  </div>
+                </div>
+                <div style="display:flex;flex-direction:column;gap:.5rem">
+                  <div
+                    style="display:flex;justify-content:space-between;align-items:center;padding:.6rem .85rem;background:var(--bg-input);border:1px solid var(--border);border-radius:var(--radius-sm)">
+                    <span
+                      style="font-size:.7rem;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.7px">Usuario</span>
+                    <span id="usuario-username" style="font-size:.9rem;font-weight:600">—</span>
+                  </div>
+                  <div
+                    style="display:flex;justify-content:space-between;align-items:center;padding:.6rem .85rem;background:var(--bg-input);border:1px solid var(--border);border-radius:var(--radius-sm)">
+                    <span
+                      style="font-size:.7rem;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.7px">Rol</span>
+                    <span id="usuario-tipo" style="font-size:.9rem;font-weight:600;color:var(--accent)">—</span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- ── Cambiar contraseña ── -->
+              <div class="card">
+                <div style="display:flex;align-items:center;gap:.6rem;margin-bottom:1rem">
+                  <svg width="16" height="16" fill="none" stroke="var(--accent)" stroke-width="2" viewBox="0 0 24 24">
+                    <rect x="3" y="11" width="18" height="11" rx="2" />
+                    <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                  </svg>
+                  <h3 style="font-family:var(--font-title);letter-spacing:1.5px;font-size:1.1rem">Cambiar Contraseña
+                  </h3>
+                </div>
+                <div style="display:flex;flex-direction:column;gap:.8rem">
+                  <div class="form-group">
+                    <label>Contraseña actual</label>
+                    <input type="password" id="cp-actual" placeholder="••••••••">
+                  </div>
+                  <div class="form-group">
+                    <label>Nueva contraseña</label>
+                    <input type="password" id="cp-nueva" placeholder="••••••••">
+                  </div>
+                  <div class="form-group">
+                    <label>Confirmar nueva contraseña</label>
+                    <input type="password" id="cp-confirmar" placeholder="••••••••">
+                  </div>
+                  <button class="btn btn-primary btn-full" onclick="cambiarPassword()">Guardar contraseña</button>
+                </div>
+              </div>
+
+              <!-- ── Preferencias ── -->
+              <div class="card" style="padding:1rem 1.1rem">
+                <p
+                  style="font-size:.68rem;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.8px;margin-bottom:.6rem">
+                  Preferencias</p>
+                <button class="btn btn-secondary btn-full"
+                  style="justify-content:flex-start;gap:.85rem;border-radius:12px" onclick="toggleTheme()">
+                  <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                    <circle cx="12" cy="12" r="5" />
+                    <line x1="12" y1="1" x2="12" y2="3" />
+                    <line x1="12" y1="21" x2="12" y2="23" />
+                    <line x1="4.22" y1="4.22" x2="5.64" y2="5.64" />
+                    <line x1="18.36" y1="18.36" x2="19.78" y2="19.78" />
+                    <line x1="1" y1="12" x2="3" y2="12" />
+                    <line x1="21" y1="12" x2="23" y2="12" />
+                    <line x1="4.22" y1="19.78" x2="5.64" y2="18.36" />
+                    <line x1="18.36" y1="5.64" x2="19.78" y2="4.22" />
+                  </svg>
+                  Cambiar tema (claro / oscuro)
+                </button>
+              </div>
+
+              <!-- ── Cerrar sesión ── -->
+              <button class="btn btn-danger btn-full" style="border-radius:14px;gap:.85rem" onclick="doLogout()">
+                <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                  <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+                  <polyline points="16 17 21 12 16 7" />
+                  <line x1="21" y1="12" x2="9" y2="12" />
+                </svg>
+                Cerrar sesión
+              </button>
+
+            </div>
+          </div>
+          <!-- ══ CAMBIAR CONTRASEÑA ══ -->
+
+
+      </main>
+    </div><!-- /.app-layout -->
+
+    <!-- BOTTOM NAVIGATION — Solo móvil -->
+    <nav class="bottom-nav" id="bottom-nav">
+      <div class="bottom-nav-items">
+        <button class="bottom-nav-item active" id="bnav-dashboard" onclick="navigate('dashboard')">
+          <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <rect x="3" y="3" width="7" height="7" rx="1" />
+            <rect x="14" y="3" width="7" height="7" rx="1" />
+            <rect x="3" y="14" width="7" height="7" rx="1" />
+            <rect x="14" y="14" width="7" height="7" rx="1" />
+          </svg>
+          <span>Inicio</span>
+        </button>
+        <button class="bottom-nav-item" id="bnav-historial" onclick="navigate('historial')">
+          <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+            <polyline points="14 2 14 8 20 8" />
+            <line x1="16" y1="13" x2="8" y2="13" />
+            <line x1="16" y1="17" x2="8" y2="17" />
+          </svg>
+          <span>Historial</span>
+        </button>
+        <button class="bottom-nav-item" id="bnav-agenda" style="display:none" onclick="navigate('agenda')">
+          <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <rect x="3" y="4" width="18" height="18" rx="2" />
+            <line x1="16" y1="2" x2="16" y2="6" />
+            <line x1="8" y1="2" x2="8" y2="6" />
+            <line x1="3" y1="10" x2="21" y2="10" />
+          </svg>
+          <span>Agenda</span>
+        </button>
+        <button class="bottom-nav-item" id="bnav-stats" onclick="navigate('stats')">
+          <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <line x1="18" y1="20" x2="18" y2="10" />
+            <line x1="12" y1="20" x2="12" y2="4" />
+            <line x1="6" y1="20" x2="6" y2="14" />
+            <line x1="2" y1="20" x2="22" y2="20" />
+          </svg>
+          <span>Stats</span>
+        </button>
+        <button class="bottom-nav-item" id="bnav-admin" style="display:none" onclick="navigate('admin')">
+          <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+            <circle cx="12" cy="7" r="4" />
+          </svg>
+          <span>Admin</span>
+        </button>
+
+        <!-- Botón de usuario -->
+        <button class="bottom-nav-item" id="bnav-usuario" onclick="openUserPanel()">
+          <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <circle cx="12" cy="8" r="4" />
+            <path d="M4 20c0-4 3.6-7 8-7s8 3 8 7" />
+          </svg>
+          <span>Cuenta</span>
+        </button>
+
+      </div>
+    </nav>
+
+    <!-- PANEL DE USUARIO ── Bottom sheet -->
+    <div class="user-panel-overlay" id="user-panel-overlay" onclick="closeUserPanel()"></div>
+    <div class="user-panel" id="user-panel">
+      <div class="user-panel-handle"></div>
+
+      <!-- Perfil -->
+      <div class="user-panel-profile">
+        <div class="user-panel-avatar" id="upanel-avatar">A</div>
+        <div class="user-panel-info">
+          <strong id="upanel-nombre">—</strong>
+          <span id="upanel-rol">—</span>
+        </div>
+      </div>
+
+      <!-- Opciones -->
+      <div class="user-panel-options">
+
+        <button class="user-panel-btn" onclick="toggleTheme(); closeUserPanel()">
+          <div class="user-panel-btn-icon" style="background:rgba(26,120,120,.12)">
+            <svg width="20" height="20" fill="none" stroke="var(--accent)" stroke-width="2" viewBox="0 0 24 24">
+              <circle cx="12" cy="12" r="5" />
+              <line x1="12" y1="1" x2="12" y2="3" />
+              <line x1="12" y1="21" x2="12" y2="23" />
+              <line x1="4.22" y1="4.22" x2="5.64" y2="5.64" />
+              <line x1="18.36" y1="18.36" x2="19.78" y2="19.78" />
+              <line x1="1" y1="12" x2="3" y2="12" />
+              <line x1="21" y1="12" x2="23" y2="12" />
+              <line x1="4.22" y1="19.78" x2="5.64" y2="18.36" />
+              <line x1="18.36" y1="5.64" x2="19.78" y2="4.22" />
+            </svg>
+          </div>
+          <div class="user-panel-btn-text">
+            <span>Cambiar Tema</span>
+            <small>Claro / Oscuro</small>
+          </div>
+          <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <polyline points="9 18 15 12 9 6" />
+          </svg>
+        </button>
+
+        <button class="user-panel-btn" onclick="navigate('usuario'); closeUserPanel()">
+          <div class="user-panel-btn-icon" style="background:rgba(26,120,120,.12)">
+            <svg width="20" height="20" fill="none" stroke="var(--accent)" stroke-width="2" viewBox="0 0 24 24">
+              <rect x="3" y="11" width="18" height="11" rx="2" />
+              <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+            </svg>
+          </div>
+          <div class="user-panel-btn-text">
+            <span>Cambiar Contraseña</span>
+            <small>Actualizar credenciales</small>
+          </div>
+          <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <polyline points="9 18 15 12 9 6" />
+          </svg>
+        </button>
+
+        <div class="user-panel-divider"></div>
+
+        <button class="user-panel-btn user-panel-btn--danger" onclick="closeUserPanel(); doLogout()">
+          <div class="user-panel-btn-icon" style="background:rgba(139,26,26,.12)">
+            <svg width="20" height="20" fill="none" stroke="#8B1A1A" stroke-width="2" viewBox="0 0 24 24">
+              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+              <polyline points="16 17 21 12 16 7" />
+              <line x1="21" y1="12" x2="9" y2="12" />
+            </svg>
+          </div>
+          <div class="user-panel-btn-text">
+            <span>Cerrar Sesión</span>
+            <small>Salir de la cuenta</small>
+          </div>
+          <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <polyline points="9 18 15 12 9 6" />
+          </svg>
+        </button>
+
+      </div>
+    </div>
+
+  </div><!-- /#app -->
+
+
+  <!-- ══════════════════════════════════════════
+     MODAL — Nuevo Chofer
+══════════════════════════════════════════ -->
+  <div class="modal-overlay" id="modal-nuevo-chofer">
+    <div class="modal" style="max-width:420px">
+      <div class="modal-header">
+        <h3>Nuevo Chofer</h3>
+        <button class="btn-icon" onclick="closeModal('modal-nuevo-chofer')">
+          <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <line x1="18" y1="6" x2="6" y2="18" />
+            <line x1="6" y1="6" x2="18" y2="18" />
+          </svg>
+        </button>
+      </div>
+      <div class="modal-body" style="display:flex;flex-direction:column;gap:.9rem">
+        <div class="form-group">
+          <label>Nombre completo</label>
+          <input type="text" id="new-chofer-nombre" placeholder="">
+        </div>
+        <div class="form-group">
+          <label>Usuario (login)</label>
+          <input type="text" id="new-chofer-user" placeholder="">
+        </div>
+        <div class="form-group">
+          <label>Contraseña</label>
+          <input type="password" id="new-chofer-pass" placeholder="••••••••">
+        </div>
+        <div class="form-group">
+          <label>Rol</label>
+          <select id="new-chofer-rol">
+            <option value="chofer">Chofer</option>
+            <option value="admin">Administrador</option>
+          </select>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeModal('modal-nuevo-chofer')">Cancelar</button>
+        <button class="btn btn-primary" onclick="addChofer()">Guardar Chofer</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════
      MODAL — Nueva Unidad
 ══════════════════════════════════════════ -->
-<div class="modal-overlay" id="modal-nueva-unidad">
-  <div class="modal" style="max-width:420px">
-    <div class="modal-header">
-      <h3>Nueva Unidad</h3>
-      <button class="btn-icon" onclick="closeModal('modal-nueva-unidad')">
-        <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-          <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
-        </svg>
-      </button>
-    </div>
-    <div class="modal-body" style="display:flex;flex-direction:column;gap:.9rem">
-      <div class="form-group">
-        <label>Placa</label>
-        <input type="text" id="new-unidad-placa" placeholder="">
+  <div class="modal-overlay" id="modal-nueva-unidad">
+    <div class="modal" style="max-width:420px">
+      <div class="modal-header">
+        <h3>Nueva Unidad</h3>
+        <button class="btn-icon" onclick="closeModal('modal-nueva-unidad')">
+          <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <line x1="18" y1="6" x2="6" y2="18" />
+            <line x1="6" y1="6" x2="18" y2="18" />
+          </svg>
+        </button>
       </div>
-      <div class="form-group">
-        <label>Modelo</label>
-        <input type="text" id="new-unidad-modelo" placeholder="">
+      <div class="modal-body" style="display:flex;flex-direction:column;gap:.9rem">
+        <div class="form-group">
+          <label>Placa</label>
+          <input type="text" id="new-unidad-placa" placeholder="">
+        </div>
+        <div class="form-group">
+          <label>Modelo</label>
+          <input type="text" id="new-unidad-modelo" placeholder="">
+        </div>
       </div>
-    </div>
-    <div class="modal-footer">
-      <button class="btn btn-secondary" onclick="closeModal('modal-nueva-unidad')">Cancelar</button>
-      <button class="btn btn-primary" onclick="addUnidad()">Guardar Unidad</button>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeModal('modal-nueva-unidad')">Cancelar</button>
+        <button class="btn btn-primary" onclick="addUnidad()">Guardar Unidad</button>
+      </div>
     </div>
   </div>
-</div>
 
-<!-- ══════════════════════════════════════════
+  <!-- ══════════════════════════════════════════
      MODAL — Detalle del viaje
 ══════════════════════════════════════════ -->
-<div class="modal-overlay" id="modal-detalle">
-  <div class="modal">
-    <div class="modal-header">
-      <h3>Detalle del Viaje</h3>
-      <button class="btn-icon" onclick="closeModal('modal-detalle')">
-        <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-          <line x1="18" y1="6"  x2="6"  y2="18"/>
-          <line x1="6"  y1="6"  x2="18" y2="18"/>
-        </svg>
-      </button>
-    </div>
-    <div class="modal-body" id="modal-detalle-body"></div>
-    <div class="modal-footer">
-      <button class="btn btn-secondary" onclick="closeModal('modal-detalle')">Cerrar</button>
-      <button class="btn btn-secondary" id="modal-edit-btn" style="border-color:var(--accent);color:var(--accent)">
-        <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-        Editar
-      </button>
-      <button class="btn btn-success"   id="modal-share-btn">
-        <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-          <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
-        </svg>
-        WhatsApp
-      </button>
+  <div class="modal-overlay" id="modal-detalle">
+    <div class="modal">
+      <div class="modal-header">
+        <h3>Detalle del Viaje</h3>
+        <button class="btn-icon" onclick="closeModal('modal-detalle')">
+          <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <line x1="18" y1="6" x2="6" y2="18" />
+            <line x1="6" y1="6" x2="18" y2="18" />
+          </svg>
+        </button>
+      </div>
+      <div class="modal-body" id="modal-detalle-body"></div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeModal('modal-detalle')">Cerrar</button>
+        <button class="btn btn-secondary" id="modal-edit-btn" style="border-color:var(--accent);color:var(--accent)">
+          <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+            <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+          </svg>
+          Editar
+        </button>
+        <button class="btn btn-success" id="modal-share-btn">
+          <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+          </svg>
+          WhatsApp
+        </button>
 
+      </div>
     </div>
   </div>
-</div>
 
-<!-- ══════════════════════════════════════════
+  <!-- ══════════════════════════════════════════
      MODAL — Confirmación de eliminación
 ══════════════════════════════════════════ -->
-<!-- ══════════════════════════════════════════
+  <!-- ══════════════════════════════════════════
      MODAL — Nuevo Viaje Agenda
 ══════════════════════════════════════════ -->
-<div class="modal-overlay" id="modal-nuevo-viaje-agenda">
-  <div class="modal" style="max-width:480px">
-    <div class="modal-header">
-      <h3>Agendar Viaje</h3>
-      <button class="btn-icon" onclick="closeModal('modal-nuevo-viaje-agenda')">
-        <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-          <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
-        </svg>
-      </button>
-    </div>
-    <div class="modal-body" style="display:flex;flex-direction:column;gap:.85rem">
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:.75rem">
-        <div class="form-group">
-          <label>Fecha</label>
-          <input type="date" id="av-fecha">
-        </div>
-        <div class="form-group">
-          <label>Hora de salida</label>
-          <input type="time" id="av-hora">
-        </div>
+  <div class="modal-overlay" id="modal-nuevo-viaje-agenda">
+    <div class="modal" style="max-width:480px">
+      <div class="modal-header">
+        <h3>Agendar Viaje</h3>
+        <button class="btn-icon" onclick="closeModal('modal-nuevo-viaje-agenda')">
+          <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <line x1="18" y1="6" x2="6" y2="18" />
+            <line x1="6" y1="6" x2="18" y2="18" />
+          </svg>
+        </button>
       </div>
-      <div class="form-group">
-        <label>Cliente</label>
-        <input type="text" id="av-cliente" placeholder="">
-      </div>
-      <div class="form-group">
-        <label>Origen de Viaje</label>
-        <input type="text" id="av-origen" placeholder="">
-      </div>
-      <div class="form-group">
-        <label>Destino</label>
-        <input type="text" id="av-destino" placeholder="">
-      </div>
-      <div class="form-group">
-        <label>Precio de viaje</label>
-        <input type="number" id="av-flete" placeholder="$0.00" min="0" step="0.01">
-      </div>
-      <div class="form-group">
-        <label>Asignar Chofer</label>
-        <select id="av-chofer"></select>
-      </div>
-      <div class="form-group">
-        <label>Unidad</label>
-        <select id="av-unidad"></select>
-      </div>
-      <div class="form-group">
-        <label>Pago de Chofer</label>
-        <input type="number" id="av-pago-chofer" placeholder="$0.00" min="0" step="0.01">
-      </div>
-      <div class="form-group">
-        <label>Indicaciones adicionales</label>
-        <textarea id="av-indicaciones" placeholder="" rows="3" style="resize:vertical;width:100%;padding:.65rem .9rem;background:var(--bg-input);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text-primary);font-family:var(--font-body);font-size:.88rem"></textarea>
-      </div>
-    </div>
-    <div class="modal-footer">
-      <button class="btn btn-secondary" onclick="closeModal('modal-nuevo-viaje-agenda')">Cancelar</button>
-      <button class="btn btn-primary"   onclick="saveViajeAgenda()">Agendar Viaje</button>
-    </div>
-  </div>
-</div>
-
-<!-- ══════════════════════════════════════════
-     MODAL — Editar Reporte (Vista Chofer)
-══════════════════════════════════════════ -->
-<div class="modal-overlay" id="modal-edit-reporte-chofer">
-  <div class="modal" style="max-width:440px">
-    <div class="modal-header">
-      <h3>Editar Reporte</h3>
-      <button class="btn-icon" onclick="closeModal('modal-edit-reporte-chofer')">
-        <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-          <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
-        </svg>
-      </button>
-    </div>
-    <div class="modal-body" style="display:flex;flex-direction:column;gap:.85rem">
-      <div class="form-group">
-        <label>Entregado a</label>
-        <input type="text" id="erc-entregado" placeholder="">
-      </div>
-      <div class="form-group">
-        <label>Diesel</label>
-        <input type="number" id="erc-diesel" placeholder="$0.00" min="0" step="0.01">
-      </div>
-      <div class="form-group">
-        <label>Otros gastos</label>
-        <div id="erc-gastos-list" style="display:flex;flex-direction:column;gap:.5rem"></div>
-        <button class="btn btn-secondary btn-sm" style="margin-top:.5rem" onclick="addGastoChoferEdit()">+ Agregar gasto</button>
-      </div>
-      <input type="hidden" id="erc-id">
-    </div>
-    <div class="modal-footer">
-      <button class="btn btn-secondary" onclick="closeModal('modal-edit-reporte-chofer')">Cancelar</button>
-      <button class="btn btn-primary"   onclick="saveEditReporteChofer()">Guardar Cambios</button>
-    </div>
-  </div>
-</div>
-
-<!-- ══════════════════════════════════════════
-     MODAL — Viajes Finalizados
-══════════════════════════════════════════ -->
-<div class="modal-overlay" id="modal-finalizados">
-  <div class="modal" style="max-width:600px;max-height:80vh;overflow-y:auto">
-    <div class="modal-header" style="position:sticky;top:0;background:var(--bg-card);z-index:1">
-      <h3>Viajes Finalizados</h3>
-      <button class="btn-icon" onclick="closeModal('modal-finalizados')">
-        <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-          <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
-        </svg>
-      </button>
-    </div>
-    <div class="modal-body">
-      <div id="agenda-finalizados-list" style="display:flex;flex-direction:column;gap:1rem"></div>
-    </div>
-  </div>
-</div>
-
-<!-- ══════════════════════════════════════════
-     MODAL — Editar Viaje Agendado
-══════════════════════════════════════════ -->
-<div class="modal-overlay" id="modal-edit-viaje-agenda">
-  <div class="modal" style="max-width:480px">
-    <div class="modal-header">
-      <h3>Editar Viaje Agendado</h3>
-      <button class="btn-icon" onclick="closeModal('modal-edit-viaje-agenda')">
-        <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-          <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
-        </svg>
-      </button>
-    </div>
-    <div class="modal-body" style="display:flex;flex-direction:column;gap:.85rem">
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:.75rem">
-        <div class="form-group">
-          <label>Fecha</label>
-          <input type="date" id="ea-fecha">
-        </div>
-        <div class="form-group">
-          <label>Hora de salida</label>
-          <input type="time" id="ea-hora">
-        </div>
-      </div>
-      <div class="form-group">
-        <label>Cliente</label>
-        <input type="text" id="ea-cliente" placeholder="">
-      </div>
-      <div class="form-group">
-        <label>Origen de Viaje</label>
-        <input type="text" id="ea-origen" placeholder="">
-      </div>
-      <div class="form-group">
-        <label>Destino</label>
-        <input type="text" id="ea-destino" placeholder="">
-      </div>
-      <div class="form-group">
-        <label>Precio de viaje</label>
-        <input type="number" id="ea-flete" placeholder="$0.00" min="0" step="0.01">
-      </div>
-      <div class="form-group">
-        <label>Chofer asignado</label>
-        <select id="ea-chofer"></select>
-      </div>
-      <div class="form-group">
-        <label>Unidad</label>
-        <select id="ea-unidad"></select>
-      </div>
-      <div class="form-group">
-        <label>Pago de Chofer</label>
-        <input type="number" id="ea-pago-chofer" placeholder="$0.00" min="0" step="0.01">
-      </div>
-      <div class="form-group">
-        <label>Indicaciones adicionales</label>
-        <textarea id="ea-indicaciones" placeholder="" rows="3" style="resize:vertical;width:100%;padding:.65rem .9rem;background:var(--bg-input);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text-primary);font-family:var(--font-body);font-size:.88rem"></textarea>
-      </div>
-      <input type="hidden" id="ea-id">
-    </div>
-    <div class="modal-footer">
-      <button class="btn btn-secondary" onclick="closeModal('modal-edit-viaje-agenda')">Cancelar</button>
-      <button class="btn btn-primary"   onclick="saveEditViajeAgenda()">Guardar Cambios</button>
-    </div>
-  </div>
-</div>
-
-<!-- ══════════════════════════════════════════
-     MODAL — Asignar Chofer a Viaje
-══════════════════════════════════════════ -->
-<div class="modal-overlay" id="modal-asignar-chofer">
-  <div class="modal" style="max-width:380px">
-    <div class="modal-header">
-      <h3>Asignar Chofer</h3>
-      <button class="btn-icon" onclick="closeModal('modal-asignar-chofer')">
-        <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-          <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
-        </svg>
-      </button>
-    </div>
-    <div class="modal-body" style="display:flex;flex-direction:column;gap:.85rem">
-      <div class="form-group">
-        <label>Selecciona el chofer</label>
-        <select id="ac-chofer"></select>
-      </div>
-      <div class="form-group">
-        <label>Unidad</label>
-        <select id="ac-unidad"></select>
-      </div>
-      <input type="hidden" id="ac-id">
-    </div>
-    <div class="modal-footer">
-      <button class="btn btn-secondary" onclick="closeModal('modal-asignar-chofer')">Cancelar</button>
-      <button class="btn btn-primary"   onclick="saveAsignarChofer()">Asignar</button>
-    </div>
-  </div>
-</div>
-
-<!-- ══════════════════════════════════════════
-     MODAL — Editar Reporte
-══════════════════════════════════════════ -->
-<div class="modal-overlay" id="modal-edit-reporte">
-  <div class="modal" style="max-width:520px">
-    <div class="modal-header">
-      <h3>Editar Viaje</h3>
-      <button class="btn-icon" onclick="closeModal('modal-edit-reporte')">
-        <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-          <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
-        </svg>
-      </button>
-    </div>
-    <div class="modal-body" style="display:flex;flex-direction:column;gap:.85rem">
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:.75rem">
-        <div class="form-group">
-          <label>Fecha</label>
-          <input type="date" id="er-fecha">
+      <div class="modal-body" style="display:flex;flex-direction:column;gap:.85rem">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:.75rem">
+          <div class="form-group">
+            <label>Fecha</label>
+            <input type="date" id="av-fecha">
+          </div>
+          <div class="form-group">
+            <label>Hora de salida</label>
+            <input type="time" id="av-hora">
+          </div>
         </div>
         <div class="form-group">
           <label>Cliente</label>
-          <input type="text" id="er-cliente" placeholder="">
+          <input type="text" id="av-cliente" placeholder="">
+        </div>
+        <div class="form-group">
+          <label>Origen de Viaje</label>
+          <input type="text" id="av-origen" placeholder="">
         </div>
         <div class="form-group">
           <label>Destino</label>
-          <input type="text" id="er-destino" placeholder="">
+          <input type="text" id="av-destino" placeholder="">
         </div>
+        <div class="form-group">
+          <label>Precio de viaje</label>
+          <input type="number" id="av-flete" placeholder="$0.00" min="0" step="0.01">
+        </div>
+        <div class="form-group">
+          <label>Asignar Chofer</label>
+          <select id="av-chofer"></select>
+        </div>
+        <div class="form-group">
+          <label>Unidad</label>
+          <select id="av-unidad"></select>
+        </div>
+        <div class="form-group">
+          <label>Pago de Chofer</label>
+          <input type="number" id="av-pago-chofer" placeholder="$0.00" min="0" step="0.01">
+        </div>
+        <div class="form-group">
+          <label>Indicaciones adicionales</label>
+          <textarea id="av-indicaciones" placeholder="" rows="3"
+            style="resize:vertical;width:100%;padding:.65rem .9rem;background:var(--bg-input);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text-primary);font-family:var(--font-body);font-size:.88rem"></textarea>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeModal('modal-nuevo-viaje-agenda')">Cancelar</button>
+        <button class="btn btn-primary" onclick="saveViajeAgenda()">Agendar Viaje</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════
+     MODAL — Editar Reporte (Vista Chofer)
+══════════════════════════════════════════ -->
+  <div class="modal-overlay" id="modal-edit-reporte-chofer">
+    <div class="modal" style="max-width:440px">
+      <div class="modal-header">
+        <h3>Editar Reporte</h3>
+        <button class="btn-icon" onclick="closeModal('modal-edit-reporte-chofer')">
+          <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <line x1="18" y1="6" x2="6" y2="18" />
+            <line x1="6" y1="6" x2="18" y2="18" />
+          </svg>
+        </button>
+      </div>
+      <div class="modal-body" style="display:flex;flex-direction:column;gap:.85rem">
         <div class="form-group">
           <label>Entregado a</label>
-          <input type="text" id="er-entregado" placeholder="">
+          <input type="text" id="erc-entregado" placeholder="">
         </div>
-      </div>
-      <div class="form-group">
-        <label>Precio de viaje</label>
-        <input type="number" id="er-flete" placeholder="$0.00" min="0" step="0.01">
-      </div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:.75rem">
         <div class="form-group">
           <label>Diesel</label>
-          <input type="number" id="er-diesel" placeholder="$0.00" min="0" step="0.01">
+          <input type="number" id="erc-diesel" placeholder="$0.00" min="0" step="0.01">
         </div>
         <div class="form-group">
-          <label>Pago de chófer</label>
-          <input type="number" id="er-pago-chofer" placeholder="$0.00" min="0" step="0.01">
+          <label>Otros gastos</label>
+          <div id="erc-gastos-list" style="display:flex;flex-direction:column;gap:.5rem"></div>
+          <button class="btn btn-secondary btn-sm" style="margin-top:.5rem" onclick="addGastoChoferEdit()">+ Agregar
+            gasto</button>
         </div>
+        <input type="hidden" id="erc-id">
       </div>
-      <input type="hidden" id="er-id">
-    </div>
-    <div class="modal-footer">
-      <button class="btn btn-secondary" onclick="closeModal('modal-edit-reporte')">Cancelar</button>
-      <button class="btn btn-primary"   onclick="saveEditReporte()">Guardar Cambios</button>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeModal('modal-edit-reporte-chofer')">Cancelar</button>
+        <button class="btn btn-primary" onclick="saveEditReporteChofer()">Guardar Cambios</button>
+      </div>
     </div>
   </div>
-</div>
 
-<!-- ══════════════════════════════════════════
+  <!-- ══════════════════════════════════════════
+     MODAL — Viajes Finalizados
+══════════════════════════════════════════ -->
+  <div class="modal-overlay" id="modal-finalizados">
+    <div class="modal" style="max-width:600px;max-height:80vh;overflow-y:auto">
+      <div class="modal-header" style="position:sticky;top:0;background:var(--bg-card);z-index:1">
+        <h3>Viajes Finalizados</h3>
+        <button class="btn-icon" onclick="closeModal('modal-finalizados')">
+          <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <line x1="18" y1="6" x2="6" y2="18" />
+            <line x1="6" y1="6" x2="18" y2="18" />
+          </svg>
+        </button>
+      </div>
+      <div class="modal-body">
+        <div id="agenda-finalizados-list" style="display:flex;flex-direction:column;gap:1rem"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════
+     MODAL — Editar Viaje Agendado
+══════════════════════════════════════════ -->
+  <div class="modal-overlay" id="modal-edit-viaje-agenda">
+    <div class="modal" style="max-width:480px">
+      <div class="modal-header">
+        <h3>Editar Viaje Agendado</h3>
+        <button class="btn-icon" onclick="closeModal('modal-edit-viaje-agenda')">
+          <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <line x1="18" y1="6" x2="6" y2="18" />
+            <line x1="6" y1="6" x2="18" y2="18" />
+          </svg>
+        </button>
+      </div>
+      <div class="modal-body" style="display:flex;flex-direction:column;gap:.85rem">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:.75rem">
+          <div class="form-group">
+            <label>Fecha</label>
+            <input type="date" id="ea-fecha">
+          </div>
+          <div class="form-group">
+            <label>Hora de salida</label>
+            <input type="time" id="ea-hora">
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Cliente</label>
+          <input type="text" id="ea-cliente" placeholder="">
+        </div>
+        <div class="form-group">
+          <label>Origen de Viaje</label>
+          <input type="text" id="ea-origen" placeholder="">
+        </div>
+        <div class="form-group">
+          <label>Destino</label>
+          <input type="text" id="ea-destino" placeholder="">
+        </div>
+        <div class="form-group">
+          <label>Precio de viaje</label>
+          <input type="number" id="ea-flete" placeholder="$0.00" min="0" step="0.01">
+        </div>
+        <div class="form-group">
+          <label>Chofer asignado</label>
+          <select id="ea-chofer"></select>
+        </div>
+        <div class="form-group">
+          <label>Unidad</label>
+          <select id="ea-unidad"></select>
+        </div>
+        <div class="form-group">
+          <label>Pago de Chofer</label>
+          <input type="number" id="ea-pago-chofer" placeholder="$0.00" min="0" step="0.01">
+        </div>
+        <div class="form-group">
+          <label>Indicaciones adicionales</label>
+          <textarea id="ea-indicaciones" placeholder="" rows="3"
+            style="resize:vertical;width:100%;padding:.65rem .9rem;background:var(--bg-input);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text-primary);font-family:var(--font-body);font-size:.88rem"></textarea>
+        </div>
+        <input type="hidden" id="ea-id">
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeModal('modal-edit-viaje-agenda')">Cancelar</button>
+        <button class="btn btn-primary" onclick="saveEditViajeAgenda()">Guardar Cambios</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════
+     MODAL — Asignar Chofer a Viaje
+══════════════════════════════════════════ -->
+  <div class="modal-overlay" id="modal-asignar-chofer">
+    <div class="modal" style="max-width:380px">
+      <div class="modal-header">
+        <h3>Asignar Chofer</h3>
+        <button class="btn-icon" onclick="closeModal('modal-asignar-chofer')">
+          <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <line x1="18" y1="6" x2="6" y2="18" />
+            <line x1="6" y1="6" x2="18" y2="18" />
+          </svg>
+        </button>
+      </div>
+      <div class="modal-body" style="display:flex;flex-direction:column;gap:.85rem">
+        <div class="form-group">
+          <label>Selecciona el chofer</label>
+          <select id="ac-chofer"></select>
+        </div>
+        <div class="form-group">
+          <label>Unidad</label>
+          <select id="ac-unidad"></select>
+        </div>
+        <input type="hidden" id="ac-id">
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeModal('modal-asignar-chofer')">Cancelar</button>
+        <button class="btn btn-primary" onclick="saveAsignarChofer()">Asignar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════
+     MODAL — Editar Reporte
+══════════════════════════════════════════ -->
+  <div class="modal-overlay" id="modal-edit-reporte">
+    <div class="modal" style="max-width:520px">
+      <div class="modal-header">
+        <h3>Editar Viaje</h3>
+        <button class="btn-icon" onclick="closeModal('modal-edit-reporte')">
+          <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <line x1="18" y1="6" x2="6" y2="18" />
+            <line x1="6" y1="6" x2="18" y2="18" />
+          </svg>
+        </button>
+      </div>
+      <div class="modal-body" style="display:flex;flex-direction:column;gap:.85rem">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:.75rem">
+          <div class="form-group">
+            <label>Fecha</label>
+            <input type="date" id="er-fecha">
+          </div>
+          <div class="form-group">
+            <label>Cliente</label>
+            <input type="text" id="er-cliente" placeholder="">
+          </div>
+          <div class="form-group">
+            <label>Destino</label>
+            <input type="text" id="er-destino" placeholder="">
+          </div>
+          <div class="form-group">
+            <label>Entregado a</label>
+            <input type="text" id="er-entregado" placeholder="">
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Precio de viaje</label>
+          <input type="number" id="er-flete" placeholder="$0.00" min="0" step="0.01">
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:.75rem">
+          <div class="form-group">
+            <label>Diesel</label>
+            <input type="number" id="er-diesel" placeholder="$0.00" min="0" step="0.01">
+          </div>
+          <div class="form-group">
+            <label>Pago de chófer</label>
+            <input type="number" id="er-pago-chofer" placeholder="$0.00" min="0" step="0.01">
+          </div>
+        </div>
+        <input type="hidden" id="er-id">
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeModal('modal-edit-reporte')">Cancelar</button>
+        <button class="btn btn-primary" onclick="saveEditReporte()">Guardar Cambios</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════
      MODAL — Editar Unidad
 ══════════════════════════════════════════ -->
-<div class="modal-overlay" id="modal-edit-unidad">
-  <div class="modal" style="max-width:420px">
-    <div class="modal-header">
-      <h3>Editar Unidad</h3>
-      <button class="btn-icon" onclick="closeModal('modal-edit-unidad')">
-        <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-          <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
-        </svg>
-      </button>
-    </div>
-    <div class="modal-body" style="display:flex;flex-direction:column;gap:.9rem">
-      <div class="form-group">
-        <label>Placa</label>
-        <input type="text" id="edit-unidad-placa" placeholder="">
+  <div class="modal-overlay" id="modal-edit-unidad">
+    <div class="modal" style="max-width:420px">
+      <div class="modal-header">
+        <h3>Editar Unidad</h3>
+        <button class="btn-icon" onclick="closeModal('modal-edit-unidad')">
+          <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <line x1="18" y1="6" x2="6" y2="18" />
+            <line x1="6" y1="6" x2="18" y2="18" />
+          </svg>
+        </button>
       </div>
-      <div class="form-group">
-        <label>Modelo</label>
-        <input type="text" id="edit-unidad-modelo" placeholder="">
+      <div class="modal-body" style="display:flex;flex-direction:column;gap:.9rem">
+        <div class="form-group">
+          <label>Placa</label>
+          <input type="text" id="edit-unidad-placa" placeholder="">
+        </div>
+        <div class="form-group">
+          <label>Modelo</label>
+          <input type="text" id="edit-unidad-modelo" placeholder="">
+        </div>
+        <input type="hidden" id="edit-unidad-id">
       </div>
-      <input type="hidden" id="edit-unidad-id">
-    </div>
-    <div class="modal-footer">
-      <button class="btn btn-secondary" onclick="closeModal('modal-edit-unidad')">Cancelar</button>
-      <button class="btn btn-primary"   onclick="saveEditUnidad()">Guardar Cambios</button>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeModal('modal-edit-unidad')">Cancelar</button>
+        <button class="btn btn-primary" onclick="saveEditUnidad()">Guardar Cambios</button>
+      </div>
     </div>
   </div>
-</div>
 
-<!-- ══════════════════════════════════════════
+  <!-- ══════════════════════════════════════════
      MODAL — Editar Chofer
 ══════════════════════════════════════════ -->
-<div class="modal-overlay" id="modal-edit-chofer">
-  <div class="modal" style="max-width:420px">
-    <div class="modal-header">
-      <h3>Editar Usuario</h3>
-      <button class="btn-icon" onclick="closeModal('modal-edit-chofer')">
-        <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-          <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
-        </svg>
-      </button>
-    </div>
-    <div class="modal-body" style="display:flex;flex-direction:column;gap:.9rem">
-      <div class="form-group">
-        <label>Nombre</label>
-        <input type="text" id="edit-chofer-nombre" placeholder="Nombre completo">
+  <div class="modal-overlay" id="modal-edit-chofer">
+    <div class="modal" style="max-width:420px">
+      <div class="modal-header">
+        <h3>Editar Usuario</h3>
+        <button class="btn-icon" onclick="closeModal('modal-edit-chofer')">
+          <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <line x1="18" y1="6" x2="6" y2="18" />
+            <line x1="6" y1="6" x2="18" y2="18" />
+          </svg>
+        </button>
       </div>
-      <div class="form-group">
-        <label>Nueva contraseña <span style="color:var(--text-muted);font-weight:400">(dejar vacío para no cambiar)</span></label>
-        <input type="password" id="edit-chofer-pass" placeholder="••••••••">
+      <div class="modal-body" style="display:flex;flex-direction:column;gap:.9rem">
+        <div class="form-group">
+          <label>Nombre</label>
+          <input type="text" id="edit-chofer-nombre" placeholder="Nombre completo">
+        </div>
+        <div class="form-group">
+          <label>Nueva contraseña <span style="color:var(--text-muted);font-weight:400">(dejar vacío para no
+              cambiar)</span></label>
+          <input type="password" id="edit-chofer-pass" placeholder="••••••••">
+        </div>
+        <div class="form-group">
+          <label>Rol</label>
+          <select id="edit-chofer-rol">
+            <option value="chofer">Chofer</option>
+            <option value="admin">Administrador</option>
+          </select>
+        </div>
+        <input type="hidden" id="edit-chofer-id">
       </div>
-      <div class="form-group">
-        <label>Rol</label>
-        <select id="edit-chofer-rol">
-          <option value="chofer">Chofer</option>
-          <option value="admin">Administrador</option>
-        </select>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeModal('modal-edit-chofer')">Cancelar</button>
+        <button class="btn btn-primary" onclick="saveEditChofer()">Guardar Cambios</button>
       </div>
-      <input type="hidden" id="edit-chofer-id">
-    </div>
-    <div class="modal-footer">
-      <button class="btn btn-secondary" onclick="closeModal('modal-edit-chofer')">Cancelar</button>
-      <button class="btn btn-primary" onclick="saveEditChofer()">Guardar Cambios</button>
     </div>
   </div>
-</div>
 
-<div class="modal-overlay" id="modal-confirm">
-  <div class="modal" style="max-width:380px">
-    <div class="modal-header">
-      <h3>Confirmar</h3>
-      <button class="btn-icon" onclick="closeModal('modal-confirm')">
-        <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-          <line x1="18" y1="6"  x2="6"  y2="18"/>
-          <line x1="6"  y1="6"  x2="18" y2="18"/>
-        </svg>
-      </button>
-    </div>
-    <div class="modal-body">
-      <p id="confirm-msg" style="color:var(--text-secondary);line-height:1.6"></p>
-    </div>
-    <div class="modal-footer">
-      <button class="btn btn-secondary" onclick="closeModal('modal-confirm')">Cancelar</button>
-      <button class="btn btn-danger"    id="confirm-ok-btn">Eliminar</button>
+  <div class="modal-overlay" id="modal-confirm">
+    <div class="modal" style="max-width:380px">
+      <div class="modal-header">
+        <h3>Confirmar</h3>
+        <button class="btn-icon" onclick="closeModal('modal-confirm')">
+          <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <line x1="18" y1="6" x2="6" y2="18" />
+            <line x1="6" y1="6" x2="18" y2="18" />
+          </svg>
+        </button>
+      </div>
+      <div class="modal-body">
+        <p id="confirm-msg" style="color:var(--text-secondary);line-height:1.6"></p>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeModal('modal-confirm')">Cancelar</button>
+        <button class="btn btn-danger" id="confirm-ok-btn">Eliminar</button>
+      </div>
     </div>
   </div>
-</div>
 
-<!-- ══════════════════════════════════════════
+  <!-- ══════════════════════════════════════════
      CONTENEDOR DE TOASTS
 ══════════════════════════════════════════ -->
-<div id="toast-container"></div>
+  <div id="toast-container"></div>
 
 
 
@@ -1072,11 +1259,12 @@
   <!-- Firebase compat — carga al final para no bloquear el HTML -->
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
-  
+
   <!-- Firebase SDKs -->
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
   <!-- App -->
   <script src="app.js"></script>
 </body>
+
 </html>

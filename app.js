@@ -381,10 +381,36 @@ function navigate(page) {
 
 }
 
-function toggleSidebar() {
-  document.getElementById('sidebar').classList.toggle('open');
-  document.getElementById('sidebar-overlay').classList.toggle('show');
+function openUserPanel() {
+  const sesion = DB.sesion;
+  if (sesion) {
+    document.getElementById('upanel-nombre').textContent = sesion.nombre || '—';
+    document.getElementById('upanel-rol').textContent    = sesion.rol === 'admin' ? 'Administrador' : 'Chofer';
+    document.getElementById('upanel-avatar').textContent = (sesion.nombre || 'A').charAt(0).toUpperCase();
+  }
+  document.getElementById('user-panel').classList.add('show');
+  document.getElementById('user-panel-overlay').classList.add('show');
+  // Marcar botón activo en bottom-nav
+  document.querySelectorAll('.bottom-nav-item').forEach(b => b.classList.remove('active'));
+  const btn = document.getElementById('bnav-usuario');
+  if (btn) btn.classList.add('active');
 }
+
+function closeUserPanel() {
+  document.getElementById('user-panel').classList.remove('show');
+  document.getElementById('user-panel-overlay').classList.remove('show');
+  // Restaurar activo según página actual
+  const activePage = document.querySelector('.page.active');
+  if (activePage) {
+    const pageId = activePage.id.replace('page-', '');
+    const bnavEl = document.getElementById('bnav-' + pageId);
+    document.querySelectorAll('.bottom-nav-item').forEach(b => b.classList.remove('active'));
+    if (bnavEl) bnavEl.classList.add('active');
+  }
+}
+
+// toggleSidebar — sin efecto (sidebar eliminado, mantenido por compatibilidad)
+function toggleSidebar() {}
 
 // ══════════════════════════════════════════════
 //  TEMA
