@@ -831,6 +831,16 @@ function renderHistorial() {
   let reportes = DB.reportes;
   if (sesion.rol === 'chofer') reportes = reportes.filter(r => r.chorerId === sesion.id);
 
+  if (!window._histFiltrado) {
+    const d = new Date();
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const u = new Date(y, d.getMonth() + 1, 0).getDate();
+    document.getElementById('f-desde').value = `${y}-${m}-01`;
+    document.getElementById('f-hasta').value = `${y}-${m}-${String(u).padStart(2, '0')}`;
+    window._histFiltrado = true;
+  }
+
   // Poblar filtros preservando selección actual
   const fu   = document.getElementById('f-unidad');
   const fc   = document.getElementById('f-chofer');
