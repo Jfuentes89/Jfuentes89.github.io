@@ -303,11 +303,13 @@ function showApp() {
   document.getElementById('user-avatar').textContent = sesion.nombre.charAt(0).toUpperCase();
   document.getElementById('nav-admin').style.display  = sesion.rol === 'admin' ? 'flex' : 'none';
   document.getElementById('nav-agenda').style.display = sesion.rol === 'admin' ? 'flex' : 'none';
-  // Bottom nav: agenda y admin solo para admin
+  // Bottom nav: agenda y admin solo para admin, nuevo reporte solo para chofer
   const bnavAgenda = document.getElementById('bnav-agenda');
   const bnavAdmin  = document.getElementById('bnav-admin');
+  const bnavNuevo  = document.getElementById('bnav-nuevo-reporte');
   if (bnavAgenda) bnavAgenda.style.display = sesion.rol === 'admin' ? 'flex' : 'none';
   if (bnavAdmin)  bnavAdmin.style.display  = sesion.rol === 'admin' ? 'flex' : 'none';
+  if (bnavNuevo)  bnavNuevo.style.display  = sesion.rol === 'chofer' ? 'flex' : 'none';
 
   // Historial: ocultar filtros y botón PDF para rol chofer
   const esAdmin = sesion.rol === 'admin';
