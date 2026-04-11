@@ -459,11 +459,9 @@ function renderDashboard() {
   const nombreMes = ahora.toLocaleDateString('es-MX', { month: 'long', year: 'numeric' });
 
   // Saludo
-  const h = ahora.getHours();
-  document.getElementById('dash-greeting').textContent =
-    (h < 12 ? 'Buenos días' : h < 18 ? 'Buenas tardes' : 'Buenas noches') + ', ' + sesion.nombre;
+  document.getElementById('dash-greeting').textContent = sesion.nombre;
   document.getElementById('dash-date').textContent =
-    ahora.toLocaleDateString('es-MX', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+    ahora.toLocaleDateString('es-MX', { day: '2-digit', month: '2-digit', year: 'numeric' });
 
   if (esChofer) {
     // ── VISTA CHOFER: solo total de pagos recibidos (flete + ingresos extra) del mes ──
