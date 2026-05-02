@@ -14,26 +14,27 @@
 const ADMIN_DEFAULT = { id: 'c0', nombre: 'Administrador', username: 'admin', password: 'admin123', rol: 'admin' };
 
 // Caché local (se sincroniza con Firestore)
-const _cache = { choferes: [], unidades: [], reportes: [], agenda: [] };
+const _cache = { choferes: [], unidades: [], reportes: [], agenda: [], reservas: [] };
 
 // Sesión: solo en localStorage (no viaja a la nube)
 const _mem = {};
 const _sessionStore = {
-  getItem: k => { try { return localStorage.getItem(k); } catch(e) { return _mem[k] || null; } },
-  setItem: (k,v) => { try { localStorage.setItem(k,v); } catch(e) { _mem[k]=v; } },
-  removeItem: k => { try { localStorage.removeItem(k); } catch(e) { delete _mem[k]; } },
+  getItem: k => { try { return localStorage.getItem(k); } catch (e) { return _mem[k] || null; } },
+  setItem: (k, v) => { try { localStorage.setItem(k, v); } catch (e) { _mem[k] = v; } },
+  removeItem: k => { try { localStorage.removeItem(k); } catch (e) { delete _mem[k]; } },
 };
 const _store = _sessionStore; // alias para compatibilidad
 
 const DB = {
-  get choferes()  { return _cache.choferes; },
-  get unidades()  { return _cache.unidades; },
-  get reportes()  { return _cache.reportes; },
-  get agenda()    { return _cache.agenda;   },
-  get sesion()    { return JSON.parse(_sessionStore.getItem('sesionActual') || 'null'); },
-  set sesion(v)   { 
+  get choferes() { return _cache.choferes; },
+  get unidades() { return _cache.unidades; },
+  get reportes() { return _cache.reportes; },
+  get agenda() { return _cache.agenda; },
+  get reservas() { return _cache.reservas; },
+  get sesion() { return JSON.parse(_sessionStore.getItem('sesionActual') || 'null'); },
+  set sesion(v) {
     if (v === null) _sessionStore.removeItem('sesionActual');
-    else _sessionStore.setItem('sesionActual', JSON.stringify(v)); 
+    else _sessionStore.setItem('sesionActual', JSON.stringify(v));
   },
 };
 
@@ -78,7 +79,7 @@ function playNotifSound() {
     const ctx = new (window.AudioContext || window.webkitAudioContext)();
     // Dos tonos cortos tipo "ping"
     [0, 220].forEach(delay => {
-      const osc  = ctx.createOscillator();
+      const osc = ctx.createOscillator();
       const gain = ctx.createGain();
       osc.connect(gain);
       gain.connect(ctx.destination);
@@ -90,7 +91,7 @@ function playNotifSound() {
       osc.start(ctx.currentTime + delay / 1000);
       osc.stop(ctx.currentTime + delay / 1000 + 0.35);
     });
-  } catch(e) { /* AudioContext no disponible */ }
+  } catch (e) { /* AudioContext no disponible */ }
 }
 
 async function notificarChofer(viaje) {
@@ -100,7 +101,7 @@ async function notificarChofer(viaje) {
     new Notification('🚛 Nuevo viaje asignado', {
       body: `${viaje.cliente} → ${viaje.destino}\nFecha: ${fmtDate(viaje.fecha)}${viaje.hora ? ' · ' + viaje.hora : ''}`,
       icon: 'https://jfuentes89.github.io/favicon.ico',
-      tag:  'viaje-' + viaje.id,
+      tag: 'viaje-' + viaje.id,
     });
   }
   // Toast visible dentro de la app
@@ -141,10 +142,10 @@ function subscribeAll() {
   // Reset diario: limpiar viajes 'completado' de días anteriores del caché visual
   // (no se borran de Firestore, solo no se muestran en el resumen de hoy)
   db.collection('agenda').orderBy('fecha', 'asc').onSnapshot(snap => {
-    const prevIds   = new Set((_cache.agenda || []).map(v => v.id));
-    const nuevos    = snap.docChanges().filter(c => c.type === 'added' || c.type === 'modified');
-    const sesion    = DB.sesion;
-    _cache.agenda   = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    const prevIds = new Set((_cache.agenda || []).map(v => v.id));
+    const nuevos = snap.docChanges().filter(c => c.type === 'added' || c.type === 'modified');
+    const sesion = DB.sesion;
+    _cache.agenda = snap.docs.map(d => ({ id: d.id, ...d.data() }));
 
     // Notificar al chofer si le asignaron un viaje nuevo o recién asignado
     if (sesion && sesion.rol === 'chofer') {
@@ -163,7 +164,7 @@ function subscribeAll() {
     }
 
     const pg = document.querySelector('.page.active');
-    if (pg && pg.id === 'page-agenda')    renderAgenda();
+    if (pg && pg.id === 'page-agenda') renderAgenda();
     if (pg && pg.id === 'page-dashboard') renderDashboard();
     // Si el chofer tiene el dashboard activo, siempre actualizar sus tarjetas de viajes
     const sesionActual = DB.sesion;
@@ -172,23 +173,50 @@ function subscribeAll() {
       if (container) container.innerHTML = renderViajesChofer(sesionActual);
     }
   });
+
+  // ── Suscripción a reservas (tiempo real) ──
+  db.collection('reservas').orderBy('creadoEn', 'desc').onSnapshot(snap => {
+    const prevCount = (_cache.reservas || []).length;
+    _cache.reservas = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    const sesion = DB.sesion;
+
+    // Notificar al admin si hay nuevas reservas
+    if (sesion && sesion.rol === 'admin') {
+      const nuevasRes = snap.docChanges().filter(c => c.type === 'added');
+      if (nuevasRes.length > 0 && prevCount > 0) {
+        // Solo notificar si no es la carga inicial
+        nuevasRes.forEach(c => {
+          const r = { id: c.doc.id, ...c.doc.data() };
+          const chofer = _cache.choferes.find(x => x.id === r.chorerId);
+          playNotifSound();
+          toast(`🚐 Nueva reserva de ${chofer ? chofer.nombre : 'un chofer'}: ${r.destino}`, 'info');
+        });
+      }
+      // Actualizar badge y sección en dashboard
+      _actualizarBadgeReservas();
+      const pg = document.querySelector('.page.active');
+      if (pg && pg.id === 'page-dashboard') renderDashboard();
+    }
+  });
 }
 
 // ── Carga inicial + suscripciones ──
 async function initDefaults() {
   await _fbReady;
 
-  const [choferes, unidades, reportes, agenda] = await Promise.all([
+  const [choferes, unidades, reportes, agenda, reservas] = await Promise.all([
     fsGetAll('choferes'),
     fsGetAll('unidades'),
     fsGetAll('reportes'),
     fsGetAll('agenda'),
+    fsGetAll('reservas'),
   ]);
 
   _cache.choferes = choferes;
   _cache.unidades = unidades;
   _cache.reportes = reportes;
-  _cache.agenda   = agenda;
+  _cache.agenda = agenda;
+  _cache.reservas = reservas;
 
   if (!_cache.choferes.find(c => c.id === 'c0')) {
     await fsSet('choferes', 'c0', ADMIN_DEFAULT);
@@ -217,8 +245,8 @@ const fmtHora = h => {
   if (!h) return '—';
   const [hh, mm] = h.split(':').map(Number);
   const ampm = hh < 12 ? 'a. m.' : 'p. m.';
-  const h12  = hh % 12 || 12;
-  return `${String(h12).padStart(2,'0')}:${String(mm).padStart(2,'0')} ${ampm}`;
+  const h12 = hh % 12 || 12;
+  return `${String(h12).padStart(2, '0')}:${String(mm).padStart(2, '0')} ${ampm}`;
 };
 
 function toast(msg, type = 'info') {
@@ -234,7 +262,7 @@ function toast(msg, type = 'info') {
   }, 3200);
 }
 
-function openModal(id)  {
+function openModal(id) {
   document.getElementById(id).classList.add('show');
   if (id === 'modal-finalizados') renderAgendaFinalizados();
 }
@@ -265,7 +293,7 @@ async function doLogin() {
 
     // 3. Verificar credenciales (primero BD, luego fallback admin hardcodeado)
     const chofer = _cache.choferes.find(c => c.username === u && c.password === p)
-                 || (u === ADMIN_DEFAULT.username && p === ADMIN_DEFAULT.password ? ADMIN_DEFAULT : null);
+      || (u === ADMIN_DEFAULT.username && p === ADMIN_DEFAULT.password ? ADMIN_DEFAULT : null);
 
     if (!chofer) { toast('Credenciales incorrectas', 'error'); return; }
 
@@ -274,7 +302,7 @@ async function doLogin() {
     await initDefaults();
     showApp();
 
-  } catch(err) {
+  } catch (err) {
     console.error('Login error:', err);
     toast('Error de conexión. Intenta de nuevo.', 'error');
   } finally {
@@ -301,24 +329,29 @@ function showApp() {
   document.getElementById('user-name-display').textContent = sesion.nombre;
   document.getElementById('user-role-display').textContent = sesion.rol === 'admin' ? 'Administrador' : 'Chofer';
   document.getElementById('user-avatar').textContent = sesion.nombre.charAt(0).toUpperCase();
-  document.getElementById('nav-admin').style.display  = sesion.rol === 'admin' ? 'flex' : 'none';
+  document.getElementById('nav-admin').style.display = sesion.rol === 'admin' ? 'flex' : 'none';
   document.getElementById('nav-agenda').style.display = sesion.rol === 'admin' ? 'flex' : 'none';
-  // Bottom nav: agenda y admin solo para admin, nuevo reporte solo para chofer
+  // Bottom nav: agenda y admin solo para admin, nuevo reporte y reserva solo para chofer
   const bnavAgenda = document.getElementById('bnav-agenda');
-  const bnavAdmin  = document.getElementById('bnav-admin');
-  const bnavNuevo  = document.getElementById('bnav-nuevo-reporte');
+  const bnavAdmin = document.getElementById('bnav-admin');
+  const bnavNuevo = document.getElementById('bnav-nuevo-reporte');
+  const bnavReserva = document.getElementById('bnav-reserva');
   if (bnavAgenda) bnavAgenda.style.display = sesion.rol === 'admin' ? 'flex' : 'none';
-  if (bnavAdmin)  bnavAdmin.style.display  = sesion.rol === 'admin' ? 'flex' : 'none';
-  if (bnavNuevo)  bnavNuevo.style.display  = sesion.rol === 'chofer' ? 'flex' : 'none';
+  if (bnavAdmin) bnavAdmin.style.display = sesion.rol === 'admin' ? 'flex' : 'none';
+  if (bnavNuevo) bnavNuevo.style.display = sesion.rol === 'chofer' ? 'flex' : 'none';
+  if (bnavReserva) bnavReserva.style.display = sesion.rol === 'chofer' ? 'flex' : 'none';
 
   // Historial: ocultar filtros y botón PDF para rol chofer
   const esAdmin = sesion.rol === 'admin';
   document.getElementById('btn-export-pdf').style.display = esAdmin ? '' : 'none';
-  document.getElementById('filtros-card').style.display   = esAdmin ? '' : 'none';
+  document.getElementById('filtros-card').style.display = esAdmin ? '' : 'none';
 
   navigate('dashboard');
+  // Actualizar badge de reservas para admin
+  if (sesion.rol === 'admin') _actualizarBadgeReservas();
   // Pedir permiso de notificaciones (solo choferes)
   if (sesion.rol === 'chofer') pedirPermisoNotificacion();
+
   // Iniciar reloj
   if (window._clockInterval) clearInterval(window._clockInterval);
   function _tickClock() {
@@ -339,14 +372,15 @@ function navigate(page) {
   document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
 
   const map = {
-    'dashboard':         'page-dashboard',
-    'nuevo-reporte':     'page-nuevo-reporte',
-    'historial':         'page-historial',
-    'admin':             'page-admin',
-    'agenda':            'page-agenda',
-    'stats':             'page-stats',
-    'cambiar-password':  'page-cambiar-password',
-    'usuario':           'page-usuario',
+    'dashboard': 'page-dashboard',
+    'nuevo-reporte': 'page-nuevo-reporte',
+    'historial': 'page-historial',
+    'admin': 'page-admin',
+    'agenda': 'page-agenda',
+    'stats': 'page-stats',
+    'cambiar-password': 'page-cambiar-password',
+    'usuario': 'page-usuario',
+    'reserva': 'page-reserva',
   };
 
   const pg = document.getElementById(map[page]);
@@ -373,13 +407,14 @@ function navigate(page) {
   if (sb && sb.classList.contains('open')) toggleSidebar();
 
   // Init específico de cada página
-  if (page === 'dashboard')        renderDashboard();
-  if (page === 'nuevo-reporte')    initForm();
-  if (page === 'historial')        renderHistorial();
-  if (page === 'admin')            renderAdmin();
-  if (page === 'agenda')           renderAgenda();
-  if (page === 'stats')            renderStats();
-  if (page === 'usuario')          renderPaginaUsuario();
+  if (page === 'dashboard') renderDashboard();
+  if (page === 'nuevo-reporte') initForm();
+  if (page === 'historial') renderHistorial();
+  if (page === 'admin') renderAdmin();
+  if (page === 'agenda') renderAgenda();
+  if (page === 'stats') renderStats();
+  if (page === 'usuario') renderPaginaUsuario();
+  if (page === 'reserva') initFormReserva();
 
 }
 
@@ -387,7 +422,7 @@ function openUserPanel() {
   const sesion = DB.sesion;
   if (sesion) {
     document.getElementById('upanel-nombre').textContent = sesion.nombre || '—';
-    document.getElementById('upanel-rol').textContent    = sesion.rol === 'admin' ? 'Administrador' : 'Chofer';
+    document.getElementById('upanel-rol').textContent = sesion.rol === 'admin' ? 'Administrador' : 'Chofer';
     document.getElementById('upanel-avatar').textContent = (sesion.nombre || 'A').charAt(0).toUpperCase();
   }
   document.getElementById('user-panel').classList.add('show');
@@ -412,7 +447,7 @@ function closeUserPanel() {
 }
 
 // toggleSidebar — sin efecto (sidebar eliminado, mantenido por compatibilidad)
-function toggleSidebar() {}
+function toggleSidebar() { }
 
 // ══════════════════════════════════════════════
 //  TEMA
@@ -442,7 +477,7 @@ function renderDashboard() {
   const esChofer = sesion.rol === 'chofer';
 
   // Filtrar al mes actual
-  const ahora  = new Date();
+  const ahora = new Date();
   const mesAct = ahora.getMonth();      // 0-11
   const anioAct = ahora.getFullYear();
 
@@ -470,7 +505,7 @@ function renderDashboard() {
       const g = (r.gastos || []).find(x => x.concepto && x.concepto.toLowerCase().includes('pago de ch'));
       return s + (g ? g.monto : 0);
     }, 0);
-    const numViajes  = reportesMes.length;
+    const numViajes = reportesMes.length;
 
     document.getElementById('metrics-grid').innerHTML = `
       <div class="metric-card income">
@@ -491,10 +526,10 @@ function renderDashboard() {
 
   } else {
     // ── VISTA ADMIN: ingresos, gastos, utilidad y viajes del mes ──
-    const totalI   = reportesMes.reduce((s, r) => s + r.subtotalIngresos, 0);
-    const totalG   = reportesMes.reduce((s, r) => s + r.subtotalGastos,   0);
+    const totalI = reportesMes.reduce((s, r) => s + r.subtotalIngresos, 0);
+    const totalG = reportesMes.reduce((s, r) => s + r.subtotalGastos, 0);
     const utilidad = totalI - totalG;
-    const pct      = totalI > 0 ? Math.min(100, Math.round((utilidad / totalI) * 100)) : 0;
+    const pct = totalI > 0 ? Math.min(100, Math.round((utilidad / totalI) * 100)) : 0;
     const numViajes = reportesMes.length;
 
     document.getElementById('metrics-grid').innerHTML = `
@@ -520,11 +555,11 @@ function renderDashboard() {
       </div>
     `;
 
-    const bar   = document.getElementById('profit-bar');
+    const bar = document.getElementById('profit-bar');
     const pctEl = document.getElementById('profit-pct');
     const barWrap = document.querySelector('.profit-bar-wrap');
     if (barWrap) barWrap.style.display = '';
-    bar.style.width      = (pct < 0 ? 0 : pct) + '%';
+    bar.style.width = (pct < 0 ? 0 : pct) + '%';
     bar.style.background = pct < 0
       ? 'linear-gradient(90deg,#ef4444,#fca5a5)'
       : 'linear-gradient(90deg,#36B25F,#57D5D5)';
@@ -533,11 +568,11 @@ function renderDashboard() {
     // ── Resumen agenda del día ──
     const hoy = localDateStr();
     const agendaHoy = DB.agenda.filter(v => v.fecha === hoy);
-    const numAceptados       = agendaHoy.filter(v => v.estado === 'aceptado').length;
-    const numEnRuta          = agendaHoy.filter(v => v.estado === 'en-ruta').length;
-    const numPendReporte     = agendaHoy.filter(v => v.estado === 'pendiente-reporte').length;
-    const numCompletados     = agendaHoy.filter(v => v.estado === 'completado').length;
-    const numPendientes      = agendaHoy.filter(v => v.estado === 'pendiente').length;
+    const numAceptados = agendaHoy.filter(v => v.estado === 'aceptado').length;
+    const numEnRuta = agendaHoy.filter(v => v.estado === 'en-ruta').length;
+    const numPendReporte = agendaHoy.filter(v => v.estado === 'pendiente-reporte').length;
+    const numCompletados = agendaHoy.filter(v => v.estado === 'completado').length;
+    const numPendientes = agendaHoy.filter(v => v.estado === 'pendiente').length;
     const resumenEl = document.getElementById('admin-agenda-resumen');
     if (resumenEl && agendaHoy.length > 0) {
       resumenEl.innerHTML = `
@@ -559,7 +594,28 @@ function renderDashboard() {
     } else if (resumenEl) {
       resumenEl.innerHTML = '';
     }
+
+    // ── Sección de Reservas Pendientes para Admin ──
+    const reservasEl = document.getElementById('admin-reservas-container');
+    if (reservasEl) {
+      const reservasPendientes = DB.reservas.filter(r => r.estado === 'pendiente');
+      if (reservasPendientes.length > 0) {
+        reservasEl.innerHTML = `
+          <div style="margin-bottom:.6rem;display:flex;align-items:center;gap:.6rem">
+            <span style="font-family:var(--font-title);font-size:1rem;letter-spacing:1.5px;color:#f59e0b">🚐 RESERVAS PENDIENTES</span>
+            <span class="reservas-badge">${reservasPendientes.length}</span>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:.75rem">
+            ${reservasPendientes.map(rv => _buildReservaCard(rv)).join('')}
+          </div>`;
+      } else {
+        reservasEl.innerHTML = '';
+      }
+    }
+    // Actualizar badge del bottom nav
+    _actualizarBadgeReservas();
   }
+
 
   // ── Actividad reciente (últimos 5 del mes para ambos roles) ──
   const recientes = [...reportesMes]
@@ -601,27 +657,28 @@ function renderDashboard() {
       </div>`;
     }).join('');
   }
+  // ── Actividad reciente, viajes asignados ya renderizados arriba ──
 }
 
 // ══════════════════════════════════════════════
 //  FORMULARIO — NUEVO REPORTE
 // ══════════════════════════════════════════════
 function initForm() {
-  const sesion   = DB.sesion;
+  const sesion = DB.sesion;
   const choferes = DB.choferes;
   const unidades = DB.unidades;
 
   document.getElementById('r-fecha').value = localDateStr();
 
   // Chofer selector
-  const cSel  = document.getElementById('r-chofer');
-  const cGrp  = document.getElementById('r-chofer-group');
+  const cSel = document.getElementById('r-chofer');
+  const cGrp = document.getElementById('r-chofer-group');
   if (sesion.rol === 'chofer') {
     cSel.innerHTML = `<option value="${sesion.id}">${sesion.nombre}</option>`;
-    cSel.disabled  = true;
+    cSel.disabled = true;
     cGrp.style.opacity = '.6';
   } else {
-    cSel.disabled  = false;
+    cSel.disabled = false;
     cGrp.style.opacity = '1';
     cSel.innerHTML = choferes.map(c => `<option value="${c.id}">${c.nombre}</option>`).join('');
   }
@@ -634,12 +691,12 @@ function initForm() {
 
   // Limpiar dinámicos
   document.getElementById('ingresos-extra').innerHTML = '';
-  document.getElementById('gastos-list').innerHTML    = '';
-  document.getElementById('r-flete').value            = '';
-  const gd = document.getElementById('g-diesel');      if (gd) gd.value = '';
+  document.getElementById('gastos-list').innerHTML = '';
+  document.getElementById('r-flete').value = '';
+  const gd = document.getElementById('g-diesel'); if (gd) gd.value = '';
   const gp = document.getElementById('g-pago-chofer'); if (gp) gp.value = '';
-  document.getElementById('r-cliente').value          = '';
-  document.getElementById('r-destino').value          = '';
+  document.getElementById('r-cliente').value = '';
+  document.getElementById('r-destino').value = '';
   const rEnt = document.getElementById('r-entregado'); if (rEnt) rEnt.value = '';
   calcLive();
 }
@@ -689,10 +746,10 @@ function calcLive() {
 
   const utilidad = ingresos - gastos;
   document.getElementById('calc-ingresos').textContent = fmt(ingresos);
-  document.getElementById('calc-gastos').textContent   = fmt(gastos);
+  document.getElementById('calc-gastos').textContent = fmt(gastos);
   const uEl = document.getElementById('calc-utilidad');
   uEl.textContent = fmt(utilidad);
-  uEl.className   = utilidad >= 0 ? 'positive' : 'negative';
+  uEl.className = utilidad >= 0 ? 'positive' : 'negative';
 }
 
 function resetForm() {
@@ -701,11 +758,11 @@ function resetForm() {
 
   if (viajeId) {
     // Venía de finalizar un viaje: solo limpiar campos editables por el chofer
-    const diesel = document.getElementById('g-diesel');       if (diesel) diesel.value = '';
+    const diesel = document.getElementById('g-diesel'); if (diesel) diesel.value = '';
     const entregado = document.getElementById('r-entregado'); if (entregado) entregado.value = '';
     document.getElementById('gastos-list').innerHTML = '';
     // Desbloquear campos que se bloquearon
-    ['r-fecha','r-cliente','r-destino','r-flete','g-pago-chofer'].forEach(fid => {
+    ['r-fecha', 'r-cliente', 'r-destino', 'r-flete', 'g-pago-chofer'].forEach(fid => {
       const el = document.getElementById(fid); if (el) el.readOnly = false;
     });
     const uSel = document.getElementById('r-unidad'); if (uSel) uSel.disabled = false;
@@ -720,7 +777,7 @@ function resetForm() {
     calcLive();
   } else {
     // Limpiar completo (uso normal por admin o chofer sin viaje asignado)
-    ['r-fecha','r-cliente','r-destino','r-flete','g-pago-chofer'].forEach(fid => {
+    ['r-fecha', 'r-cliente', 'r-destino', 'r-flete', 'g-pago-chofer'].forEach(fid => {
       const el = document.getElementById(fid); if (el) el.readOnly = false;
     });
     const uSel = document.getElementById('r-unidad'); if (uSel) uSel.disabled = false;
@@ -736,21 +793,21 @@ function resetForm() {
 }
 
 async function saveReporte() {
-  const sesion   = DB.sesion;
-  const fecha    = document.getElementById('r-fecha').value;
+  const sesion = DB.sesion;
+  const fecha = document.getElementById('r-fecha').value;
   const chorerId = document.getElementById('r-chofer').value;
   const unidadId = document.getElementById('r-unidad').value;
-  const cliente  = document.getElementById('r-cliente').value.trim();
-  const destino    = document.getElementById('r-destino').value.trim();
+  const cliente = document.getElementById('r-cliente').value.trim();
+  const destino = document.getElementById('r-destino').value.trim();
   const entregadoA = document.getElementById('r-entregado').value.trim();
-  const flete    = parseFloat(document.getElementById('r-flete').value) || 0;
+  const flete = parseFloat(document.getElementById('r-flete').value) || 0;
 
-  if (!fecha)       { toast('Selecciona la fecha del viaje', 'warning'); return; }
-  if (!unidadId)    { toast('Selecciona una unidad', 'warning'); return; }
-  if (!cliente)     { toast('Ingresa el cliente', 'warning'); return; }
-  if (!destino)     { toast('Ingresa el destino', 'warning'); return; }
+  if (!fecha) { toast('Selecciona la fecha del viaje', 'warning'); return; }
+  if (!unidadId) { toast('Selecciona una unidad', 'warning'); return; }
+  if (!cliente) { toast('Ingresa el cliente', 'warning'); return; }
+  if (!destino) { toast('Ingresa el destino', 'warning'); return; }
 
-  if (!entregadoA)  { toast('Ingresa a quién se entregó la carga', 'warning'); return; }
+  if (!entregadoA) { toast('Ingresa a quién se entregó la carga', 'warning'); return; }
 
   const chofer = DB.choferes.find(c => c.id === chorerId) || DB.choferes.find(c => c.id === sesion.id);
   const unidad = DB.unidades.find(u => u.id === unidadId);
@@ -758,37 +815,37 @@ async function saveReporte() {
   // Recopilar ingresos extra
   const ingresosExtra = [];
   document.querySelectorAll('#ingresos-extra .dynamic-item').forEach(row => {
-    const ins     = row.querySelectorAll('input');
+    const ins = row.querySelectorAll('input');
     const concepto = ins[0]?.value?.trim();
-    const monto    = parseFloat(ins[1]?.value) || 0;
+    const monto = parseFloat(ins[1]?.value) || 0;
     if (concepto && monto > 0) ingresosExtra.push({ concepto, monto });
   });
 
   // Recopilar gastos (campos fijos + dinámicos)
   const gastos = [];
-  const _diesel     = parseFloat(document.getElementById('g-diesel')?.value) || 0;
+  const _diesel = parseFloat(document.getElementById('g-diesel')?.value) || 0;
   const _pagoChofer = parseFloat(document.getElementById('g-pago-chofer')?.value) || 0;
-  if (_diesel > 0)     gastos.push({ concepto: 'Diesel',          monto: _diesel });
-  if (_pagoChofer > 0) gastos.push({ concepto: 'Pago de chófer',  monto: _pagoChofer });
+  if (_diesel > 0) gastos.push({ concepto: 'Diesel', monto: _diesel });
+  if (_pagoChofer > 0) gastos.push({ concepto: 'Pago de chófer', monto: _pagoChofer });
   document.querySelectorAll('#gastos-list .dynamic-item').forEach(row => {
-    const ins      = row.querySelectorAll('input');
+    const ins = row.querySelectorAll('input');
     const concepto = ins[0]?.value?.trim();
-    const monto    = parseFloat(ins[1]?.value) || 0;
+    const monto = parseFloat(ins[1]?.value) || 0;
     if (concepto && monto > 0) gastos.push({ concepto, monto });
   });
 
   const subtotalIngresos = flete + ingresosExtra.reduce((s, i) => s + i.monto, 0);
-  const subtotalGastos   = gastos.reduce((s, g) => s + g.monto, 0);
-  const utilidad         = subtotalIngresos - subtotalGastos;
+  const subtotalGastos = gastos.reduce((s, g) => s + g.monto, 0);
+  const utilidad = subtotalIngresos - subtotalGastos;
 
   const reporte = {
     id: uid(),
     fecha,
-    chorerId:     chofer?.id,
+    chorerId: chofer?.id,
     choferNombre: chofer?.nombre || 'N/D',
-    unidadId:     unidad?.id,
-    unidadPlaca:  unidad?.placa   || 'N/D',
-    unidadModelo: unidad?.modelo  || '',
+    unidadId: unidad?.id,
+    unidadPlaca: unidad?.placa || 'N/D',
+    unidadModelo: unidad?.modelo || '',
     cliente,
     destino,
     entregadoA,
@@ -817,7 +874,7 @@ async function saveReporte() {
       resetForm();
       navigate('historial');
     }
-  } catch(e) {
+  } catch (e) {
     console.error(e);
     toast('Error al guardar. Verifica tu conexión.', 'error');
   }
@@ -842,8 +899,8 @@ function renderHistorial() {
   }
 
   // Poblar filtros preservando selección actual
-  const fu   = document.getElementById('f-unidad');
-  const fc   = document.getElementById('f-chofer');
+  const fu = document.getElementById('f-unidad');
+  const fc = document.getElementById('f-chofer');
   const prevU = fu.value, prevC = fc.value;
   fu.innerHTML = '<option value="">Todas las unidades</option>' +
     DB.unidades.map(u => `<option value="${u.id}">${u.modelo} (${u.placa})</option>`).join('');
@@ -856,8 +913,8 @@ function renderHistorial() {
   const hasta = document.getElementById('f-hasta').value;
 
   const filtrados = reportes.filter(r => {
-    if (desde && r.fecha < desde)    return false;
-    if (hasta && r.fecha > hasta)    return false;
+    if (desde && r.fecha < desde) return false;
+    if (hasta && r.fecha > hasta) return false;
     if (fu.value && r.unidadId !== fu.value) return false;
     if (fc.value && r.chorerId !== fc.value) return false;
     return true;
@@ -891,8 +948,8 @@ function renderHistorial() {
 }
 
 function clearFilters() {
-  document.getElementById('f-desde').value  = '';
-  document.getElementById('f-hasta').value  = '';
+  document.getElementById('f-desde').value = '';
+  document.getElementById('f-hasta').value = '';
   document.getElementById('f-unidad').value = '';
   document.getElementById('f-chofer').value = '';
   renderHistorial();
@@ -907,7 +964,7 @@ function confirmDelete(id) {
       await fsDelete('reportes', id);
       closeModal('modal-confirm');
       toast('Reporte eliminado', 'info');
-    } catch(e) {
+    } catch (e) {
       toast('Error al eliminar', 'error');
     }
   };
@@ -921,7 +978,7 @@ function showDetalle(id) {
   if (!r) return;
 
   const ingrosExtra = r.ingresosExtra || [];
-  const gastos      = r.gastos       || [];
+  const gastos = r.gastos || [];
 
   document.getElementById('modal-detalle-body').innerHTML = `
     <div class="detail-row"><span>Fecha</span><span>${fmtDate(r.fecha)}</span></div>
@@ -997,7 +1054,7 @@ function _buildAgendaCard(v) {
       <div class="agenda-info-item"><label>Fecha</label><span>${fmtDate(v.fecha)}</span></div>
       <div class="agenda-info-item"><label>Hora salida</label><span>${fmtHora(v.hora)}</span></div>
       ${v.horaInicio ? `<div class="agenda-info-item"><label>Inicio real</label><span style="color:#57D5D5;font-weight:600">${v.horaInicio}</span></div>` : ''}
-      ${v.horaFin    ? `<div class="agenda-info-item"><label>Finalizado</label><span style="color:#36B25F;font-weight:600">${v.horaFin}</span></div>` : ''}
+      ${v.horaFin ? `<div class="agenda-info-item"><label>Finalizado</label><span style="color:#36B25F;font-weight:600">${v.horaFin}</span></div>` : ''}
       <div class="agenda-info-item"><label>Chofer</label><span>${chofer ? chofer.nombre : '⚠ Sin asignar'}</span></div>
       <div class="agenda-info-item"><label>Unidad</label><span>${unidad ? unidad.modelo + ' (' + unidad.placa + ')' : '—'}</span></div>
       <div class="agenda-info-item"><label>Precio</label><span style="color:var(--success)">${fmt(v.flete)}</span></div>
@@ -1031,19 +1088,19 @@ function _renderAgendaSection(containerId, viajes, titulo, accentStyle) {
 function renderAgenda() {
   if (!document.getElementById('agenda-sec-hoy')) return;
 
-  const todos   = DB.agenda;
-  const hoy     = localDateStr(0);
-  const manana  = localDateStr(1);
+  const todos = DB.agenda;
+  const hoy = localDateStr(0);
+  const manana = localDateStr(1);
 
   // Activos: no completados. Los en-ruta SIEMPRE son activos sin importar fecha
   const activos = todos.filter(v => v.estado !== 'completado');
 
   const enRutaFueraDeFecha = activos.filter(v => v.estado === 'en-ruta' && v.fecha !== hoy && v.fecha !== manana);
-  const deHoy    = activos.filter(v => v.fecha === hoy).sort((a,b)    => (a.hora||'').localeCompare(b.hora||''));
-  const deManana = activos.filter(v => v.fecha === manana).sort((a,b) => (a.hora||'').localeCompare(b.hora||''));
+  const deHoy = activos.filter(v => v.fecha === hoy).sort((a, b) => (a.hora || '').localeCompare(b.hora || ''));
+  const deManana = activos.filter(v => v.fecha === manana).sort((a, b) => (a.hora || '').localeCompare(b.hora || ''));
   // Próximos: excluir completados, excluir en-ruta que ya fueron separados, excluir hoy y mañana
-  const resto    = activos.filter(v => v.fecha !== hoy && v.fecha !== manana && v.estado !== 'en-ruta')
-                          .sort((a,b) => a.fecha.localeCompare(b.fecha));
+  const resto = activos.filter(v => v.fecha !== hoy && v.fecha !== manana && v.estado !== 'en-ruta')
+    .sort((a, b) => a.fecha.localeCompare(b.fecha));
 
   // Sección especial: en ruta fuera de fecha (pasados o sin fecha de hoy)
   const secEnRuta = document.getElementById('agenda-sec-en-ruta');
@@ -1069,9 +1126,9 @@ function renderAgenda() {
     return;
   }
 
-  _renderAgendaSection('agenda-sec-hoy',    deHoy,    'VIAJES PARA HOY',    'color:#762FA4');
+  _renderAgendaSection('agenda-sec-hoy', deHoy, 'VIAJES PARA HOY', 'color:#762FA4');
   _renderAgendaSection('agenda-sec-manana', deManana, 'VIAJES PARA MAÑANA', 'color:#57D5D5');
-  _renderAgendaSection('agenda-sec-resto',  resto,    'PRÓXIMOS VIAJES',    'color:var(--text-muted)');
+  _renderAgendaSection('agenda-sec-resto', resto, 'PRÓXIMOS VIAJES', 'color:var(--text-muted)');
 
   if (!deHoy.length && !enRutaFueraDeFecha.length) {
     document.getElementById('agenda-sec-hoy').innerHTML =
@@ -1082,7 +1139,7 @@ function renderAgenda() {
 
 function renderAgendaFinalizados() {
   const completados = DB.agenda.filter(v => v.estado === 'completado')
-                               .sort((a,b) => b.fecha.localeCompare(a.fecha));
+    .sort((a, b) => b.fecha.localeCompare(a.fecha));
   const el = document.getElementById('agenda-finalizados-list');
   if (!el) return;
   if (!completados.length) {
@@ -1121,12 +1178,12 @@ function openModalAgenda() {
 }
 
 async function saveViajeAgenda() {
-  const fecha    = document.getElementById('av-fecha').value;
-  const hora     = document.getElementById('av-hora').value;
-  const cliente  = document.getElementById('av-cliente').value.trim();
-  const origen   = document.getElementById('av-origen').value.trim();
-  const destino  = document.getElementById('av-destino').value.trim();
-  const flete    = parseFloat(document.getElementById('av-flete').value) || 0;
+  const fecha = document.getElementById('av-fecha').value;
+  const hora = document.getElementById('av-hora').value;
+  const cliente = document.getElementById('av-cliente').value.trim();
+  const origen = document.getElementById('av-origen').value.trim();
+  const destino = document.getElementById('av-destino').value.trim();
+  const flete = parseFloat(document.getElementById('av-flete').value) || 0;
   const chorerId = document.getElementById('av-chofer').value;
   const unidadId = document.getElementById('av-unidad').value;
 
@@ -1142,13 +1199,13 @@ async function saveViajeAgenda() {
   try {
     await fsSet('agenda', viaje.id, viaje);
     // Limpiar
-    ['av-fecha','av-hora','av-cliente','av-origen','av-destino','av-flete','av-pago-chofer'].forEach(id => document.getElementById(id).value = '');
+    ['av-fecha', 'av-hora', 'av-cliente', 'av-origen', 'av-destino', 'av-flete', 'av-pago-chofer'].forEach(id => document.getElementById(id).value = '');
     document.getElementById('av-indicaciones').value = '';
     document.getElementById('av-chofer').value = '';
     document.getElementById('av-unidad').value = '';
     closeModal('modal-nuevo-viaje-agenda');
     toast('Viaje agendado correctamente', 'success');
-  } catch(e) { console.error(e); toast('Error al agendar', 'error'); }
+  } catch (e) { console.error(e); toast('Error al agendar', 'error'); }
 }
 
 function openEditViajeAgenda(id) {
@@ -1163,29 +1220,29 @@ function openEditViajeAgenda(id) {
     '<option value="">Sin asignar</option>' +
     DB.unidades.map(u => `<option value="${u.id}"${v.unidadId === u.id ? ' selected' : ''}>${u.modelo} (${u.placa})</option>`).join('');
   // Precargar datos
-  document.getElementById('ea-id').value      = v.id;
-  document.getElementById('ea-fecha').value   = v.fecha  || '';
-  document.getElementById('ea-hora').value    = v.hora   || '';
+  document.getElementById('ea-id').value = v.id;
+  document.getElementById('ea-fecha').value = v.fecha || '';
+  document.getElementById('ea-hora').value = v.hora || '';
   document.getElementById('ea-cliente').value = v.cliente || '';
-  document.getElementById('ea-origen').value  = v.origen  || '';
+  document.getElementById('ea-origen').value = v.origen || '';
   document.getElementById('ea-destino').value = v.destino || '';
-  document.getElementById('ea-flete').value        = v.flete      || '';
-  document.getElementById('ea-pago-chofer').value   = v.pagoChofer   || '';
-  document.getElementById('ea-indicaciones').value  = v.indicaciones || '';
+  document.getElementById('ea-flete').value = v.flete || '';
+  document.getElementById('ea-pago-chofer').value = v.pagoChofer || '';
+  document.getElementById('ea-indicaciones').value = v.indicaciones || '';
   openModal('modal-edit-viaje-agenda');
 }
 
 async function saveEditViajeAgenda() {
-  const id       = document.getElementById('ea-id').value;
-  const fecha    = document.getElementById('ea-fecha').value;
-  const hora     = document.getElementById('ea-hora').value;
-  const cliente  = document.getElementById('ea-cliente').value.trim();
-  const origen   = document.getElementById('ea-origen').value.trim();
-  const destino  = document.getElementById('ea-destino').value.trim();
-  const flete      = parseFloat(document.getElementById('ea-flete').value) || 0;
+  const id = document.getElementById('ea-id').value;
+  const fecha = document.getElementById('ea-fecha').value;
+  const hora = document.getElementById('ea-hora').value;
+  const cliente = document.getElementById('ea-cliente').value.trim();
+  const origen = document.getElementById('ea-origen').value.trim();
+  const destino = document.getElementById('ea-destino').value.trim();
+  const flete = parseFloat(document.getElementById('ea-flete').value) || 0;
   const pagoChofer = parseFloat(document.getElementById('ea-pago-chofer').value) || 0;
-  const chorerId   = document.getElementById('ea-chofer').value;
-  const unidadId   = document.getElementById('ea-unidad').value;
+  const chorerId = document.getElementById('ea-chofer').value;
+  const unidadId = document.getElementById('ea-unidad').value;
 
   if (!fecha || !cliente || !destino) {
     toast('Completa fecha, cliente y destino', 'warning'); return;
@@ -1204,7 +1261,7 @@ async function saveEditViajeAgenda() {
     closeModal('modal-edit-viaje-agenda');
     toast('Viaje actualizado correctamente', 'success');
     renderAgenda();
-  } catch(e) { console.error(e); toast('Error al guardar', 'error'); }
+  } catch (e) { console.error(e); toast('Error al guardar', 'error'); }
 }
 
 function openAsignarChofer(id) {
@@ -1222,7 +1279,7 @@ function openAsignarChofer(id) {
 }
 
 async function saveAsignarChofer() {
-  const id       = document.getElementById('ac-id').value;
+  const id = document.getElementById('ac-id').value;
   const chorerId = document.getElementById('ac-chofer').value;
   const unidadId = document.getElementById('ac-unidad').value;
 
@@ -1240,7 +1297,7 @@ async function saveAsignarChofer() {
     closeModal('modal-asignar-chofer');
     toast('Chofer asignado correctamente', 'success');
     renderAgenda();
-  } catch(e) { console.error(e); toast('Error al asignar', 'error'); }
+  } catch (e) { console.error(e); toast('Error al asignar', 'error'); }
 }
 
 function deleteViajeAgenda(id) {
@@ -1253,7 +1310,7 @@ function deleteViajeAgenda(id) {
       _cache.agenda = _cache.agenda.filter(v => v.id !== id);
       toast('Viaje eliminado', 'info');
       renderAgenda();
-    } catch(e) { toast('Error al eliminar', 'error'); }
+    } catch (e) { toast('Error al eliminar', 'error'); }
   };
 }
 
@@ -1270,12 +1327,12 @@ function choferIniciarViaje(id) {
   document.getElementById('confirm-msg').textContent =
     `¿Confirmas que inicias el viaje a ${viaje.destino}${viaje.cliente ? ' para ' + viaje.cliente : ''}?`;
   const btn = document.getElementById('confirm-ok-btn');
-  btn.textContent  = 'Iniciar Viaje';
-  btn.className    = 'btn btn-primary';
+  btn.textContent = 'Iniciar Viaje';
+  btn.className = 'btn btn-primary';
   btn.onclick = async () => {
     closeModal('modal-confirm');
     btn.textContent = 'Eliminar';
-    btn.className   = 'btn btn-danger';
+    btn.className = 'btn btn-danger';
     const horaInicio = new Date().toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit', hour12: true });
     await _actualizarEstadoViajeExtra(id, 'en-ruta', { horaInicio });
     toast('¡Viaje iniciado! En ruta.', 'info');
@@ -1291,19 +1348,19 @@ async function choferFinalizarViaje(id) {
   setTimeout(() => {
     const g = (sel) => document.getElementById(sel);
     // Precargar datos del viaje
-    if (g('r-fecha'))   g('r-fecha').value   = viaje.fecha || localDateStr();
+    if (g('r-fecha')) g('r-fecha').value = viaje.fecha || localDateStr();
     if (g('r-cliente')) g('r-cliente').value = viaje.cliente || '';
     if (g('r-destino')) g('r-destino').value = viaje.destino || '';
-    if (g('r-flete'))   { g('r-flete').value = viaje.flete || ''; calcLive(); }
+    if (g('r-flete')) { g('r-flete').value = viaje.flete || ''; calcLive(); }
     if (viaje.pagoChofer && g('g-pago-chofer')) { g('g-pago-chofer').value = viaje.pagoChofer; calcLive(); }
     if (viaje.chorerId && g('r-chofer')) g('r-chofer').value = viaje.chorerId;
     if (viaje.unidadId && g('r-unidad')) g('r-unidad').value = viaje.unidadId;
     // Bloquear campos para que el chofer no los modifique
-    ['r-fecha','r-cliente','r-destino','r-flete'].forEach(fid => {
+    ['r-fecha', 'r-cliente', 'r-destino', 'r-flete'].forEach(fid => {
       const el = g(fid); if (el) el.readOnly = true;
     });
-    if (g('r-unidad'))     g('r-unidad').disabled = true;
-    if (g('r-chofer'))     g('r-chofer').disabled = true;
+    if (g('r-unidad')) g('r-unidad').disabled = true;
+    if (g('r-chofer')) g('r-chofer').disabled = true;
     if (g('g-pago-chofer')) g('g-pago-chofer').readOnly = true;
     // Cambiar botón a "Finalizar Viaje"
     const btn = document.querySelector('button[onclick="saveReporte()"]');
@@ -1322,10 +1379,10 @@ function reabrirReportePendiente(id) {
   navigate('nuevo-reporte');
   setTimeout(() => {
     const el = (sel) => document.getElementById(sel);
-    if (el('r-fecha'))   el('r-fecha').value   = viaje.fecha || localDateStr();
-    if (el('r-cliente')) el('r-cliente').value  = viaje.cliente || '';
-    if (el('r-destino')) el('r-destino').value  = viaje.destino || '';
-    if (el('r-flete'))   { el('r-flete').value  = viaje.flete || ''; calcLive(); }
+    if (el('r-fecha')) el('r-fecha').value = viaje.fecha || localDateStr();
+    if (el('r-cliente')) el('r-cliente').value = viaje.cliente || '';
+    if (el('r-destino')) el('r-destino').value = viaje.destino || '';
+    if (el('r-flete')) { el('r-flete').value = viaje.flete || ''; calcLive(); }
     if (viaje.chorerId && el('r-chofer')) el('r-chofer').value = viaje.chorerId;
     if (viaje.unidadId && el('r-unidad')) el('r-unidad').value = viaje.unidadId;
   }, 300);
@@ -1433,13 +1490,13 @@ function renderStats() {
   const container = document.getElementById('stats-container');
   if (!container) return;
 
-  const sesion  = DB.sesion;
+  const sesion = DB.sesion;
   const esAdmin = sesion.rol === 'admin';
-  const ahora   = new Date();
+  const ahora = new Date();
 
   // Poblar selectores año y mes
   const selAnio = document.getElementById('stats-anio');
-  const selMes  = document.getElementById('stats-mes');
+  const selMes = document.getElementById('stats-mes');
   const anioActual = ahora.getFullYear();
 
   if (selAnio.options.length === 0) {
@@ -1451,8 +1508,8 @@ function renderStats() {
     selAnio.value = anioActual;
   }
   if (selMes.options.length === 0) {
-    const mesesN = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
-    mesesN.forEach((m,i) => {
+    const mesesN = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+    mesesN.forEach((m, i) => {
       const o = document.createElement('option');
       o.value = i; o.textContent = m;
       selMes.appendChild(o);
@@ -1460,10 +1517,10 @@ function renderStats() {
     selMes.value = ahora.getMonth();
   }
 
-  const anioSel  = parseInt(selAnio.value);
-  const mesSel   = parseInt(selMes.value);
+  const anioSel = parseInt(selAnio.value);
+  const mesSel = parseInt(selMes.value);
   const diasEnMes = new Date(anioSel, mesSel + 1, 0).getDate();
-  const meses    = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+  const meses = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
 
   let reportes = DB.reportes;
   if (!esAdmin) reportes = reportes.filter(r => r.chorerId === sesion.id);
@@ -1479,27 +1536,27 @@ function renderStats() {
     return parseInt(r.fecha.split('-')[0]) === anioSel;
   });
 
-  const dailyLabels = Array.from({length: diasEnMes}, (_, i) => String(i + 1));
+  const dailyLabels = Array.from({ length: diasEnMes }, (_, i) => String(i + 1));
 
   let dailyData, dailyLabel, dailyColors;
   if (esAdmin) {
     dailyData = dailyLabels.map(d => {
-      const dia = String(d).padStart(2,'0');
-      const fecha = `${anioSel}-${String(mesSel+1).padStart(2,'0')}-${dia}`;
+      const dia = String(d).padStart(2, '0');
+      const fecha = `${anioSel}-${String(mesSel + 1).padStart(2, '0')}-${dia}`;
       return reportesMes.filter(r => r.fecha === fecha).reduce((s, r) => s + r.utilidad, 0);
     });
-    dailyLabel  = 'Utilidad Neta Diaria';
+    dailyLabel = 'Utilidad Neta Diaria';
     dailyColors = dailyData.map(v => v >= 0 ? 'rgba(54,178,95,.75)' : 'rgba(239,68,68,.75)');
   } else {
     dailyData = dailyLabels.map(d => {
-      const dia = String(d).padStart(2,'0');
-      const fecha = `${anioSel}-${String(mesSel+1).padStart(2,'0')}-${dia}`;
+      const dia = String(d).padStart(2, '0');
+      const fecha = `${anioSel}-${String(mesSel + 1).padStart(2, '0')}-${dia}`;
       return reportesMes.filter(r => r.fecha === fecha).reduce((s, r) => {
-        const g = (r.gastos||[]).find(x => x.concepto && x.concepto.toLowerCase().includes('pago de ch'));
+        const g = (r.gastos || []).find(x => x.concepto && x.concepto.toLowerCase().includes('pago de ch'));
         return s + (g ? g.monto : 0);
       }, 0);
     });
-    dailyLabel  = 'Pago de Chófer Diario';
+    dailyLabel = 'Pago de Chófer Diario';
     dailyColors = 'rgba(157,93,217,.75)';
   }
 
@@ -1507,16 +1564,16 @@ function renderStats() {
   if (esAdmin) {
     monthlyData = meses.map((_, i) =>
       reportesAnio.filter(r => parseInt(r.fecha.split('-')[1]) - 1 === i)
-                  .reduce((s, r) => s + r.utilidad, 0)
+        .reduce((s, r) => s + r.utilidad, 0)
     );
     monthlyLabel = 'Utilidad Neta Mensual';
   } else {
     monthlyData = meses.map((_, i) =>
       reportesAnio.filter(r => parseInt(r.fecha.split('-')[1]) - 1 === i)
-                  .reduce((s, r) => {
-                    const g = (r.gastos||[]).find(x => x.concepto && x.concepto.toLowerCase().includes('pago de ch'));
-                    return s + (g ? g.monto : 0);
-                  }, 0)
+        .reduce((s, r) => {
+          const g = (r.gastos || []).find(x => x.concepto && x.concepto.toLowerCase().includes('pago de ch'));
+          return s + (g ? g.monto : 0);
+        }, 0)
     );
     monthlyLabel = 'Pago de Chófer Mensual';
   }
@@ -1526,7 +1583,7 @@ function renderStats() {
   if (esAdmin) {
     const choferes = DB.choferes.filter(c => c.id !== 'c0');
     const choferLabels = choferes.map(c => c.nombre);
-    const choferData   = choferes.map(c =>
+    const choferData = choferes.map(c =>
       reportesMes.filter(r => r.chorerId === c.id).reduce((s, r) => s + r.utilidad, 0)
     );
     const choferCardHeight = Math.max(180, choferes.length * 52);
@@ -1542,28 +1599,32 @@ function renderStats() {
         type: 'bar',
         data: {
           labels: choferLabels,
-          datasets: [{ label: 'Utilidad', data: choferData,
+          datasets: [{
+            label: 'Utilidad', data: choferData,
             backgroundColor: choferData.map(v => v >= 0 ? 'rgba(54,178,95,.8)' : 'rgba(239,68,68,.8)'),
-            borderRadius: 4, borderSkipped: false }]
+            borderRadius: 4, borderSkipped: false
+          }]
         },
         options: {
           responsive: true, maintainAspectRatio: false,
-          plugins: { legend: { display: false },
-            tooltip: { callbacks: { label: ctx => ' $' + Number(ctx.parsed.y||0).toLocaleString('es-MX',{minimumFractionDigits:2}) } } },
+          plugins: {
+            legend: { display: false },
+            tooltip: { callbacks: { label: ctx => ' $' + Number(ctx.parsed.y || 0).toLocaleString('es-MX', { minimumFractionDigits: 2 }) } }
+          },
           scales: {
             x: { ticks: { color: textColor, font: { size: 11, weight: '600' } }, grid: { color: gridColor, lineWidth: 1 }, border: { color: isDark ? 'rgba(255,255,255,.35)' : 'rgba(0,0,0,.25)' } },
-            y: { ticks: { color: textColor, font: { size: 10 }, callback: v => '$' + Number(v).toLocaleString('es-MX',{minimumFractionDigits:0}) }, grid: { color: gridColor, lineWidth: 1 }, border: { color: isDark ? 'rgba(255,255,255,.35)' : 'rgba(0,0,0,.25)' } }
+            y: { ticks: { color: textColor, font: { size: 10 }, callback: v => '$' + Number(v).toLocaleString('es-MX', { minimumFractionDigits: 0 }) }, grid: { color: gridColor, lineWidth: 1 }, border: { color: isDark ? 'rgba(255,255,255,.35)' : 'rgba(0,0,0,.25)' } }
           }
         }
       });
     }, 50);
   }
 
-  const tituloMes  = esAdmin ? 'UTILIDAD NETA DIARIA — ' : 'PAGOS DIARIOS — ';
+  const tituloMes = esAdmin ? 'UTILIDAD NETA DIARIA — ' : 'PAGOS DIARIOS — ';
   const tituloAnio = esAdmin ? 'UTILIDAD NETA MENSUAL — ' : 'PAGOS MENSUALES — ';
 
   container.innerHTML =
-    _chartCard(tituloMes  + meses[mesSel].toUpperCase() + ' ' + anioSel, 'chart-daily') +
+    _chartCard(tituloMes + meses[mesSel].toUpperCase() + ' ' + anioSel, 'chart-daily') +
     _chartCard(tituloAnio + anioSel, 'chart-monthly') +
     choferHtml;
 
@@ -1583,14 +1644,16 @@ function renderStats() {
 
 function _chartOpts(indexAxis) {
   const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
-  const textColor  = isDark ? '#b0b8c8' : '#555e6d';
-  const gridColor  = isDark ? 'rgba(255,255,255,.18)' : 'rgba(0,0,0,.12)';
+  const textColor = isDark ? '#b0b8c8' : '#555e6d';
+  const gridColor = isDark ? 'rgba(255,255,255,.18)' : 'rgba(0,0,0,.12)';
   const borderColor = isDark ? 'rgba(255,255,255,.35)' : 'rgba(0,0,0,.25)';
   return {
     indexAxis: indexAxis ? 'y' : 'x',
     responsive: true, maintainAspectRatio: false,
-    plugins: { legend: { display: false },
-      tooltip: { callbacks: { label: ctx => ' $' + Number(ctx.parsed[indexAxis ? 'x' : 'y'] || 0).toLocaleString('es-MX', { minimumFractionDigits: 2 }) } } },
+    plugins: {
+      legend: { display: false },
+      tooltip: { callbacks: { label: ctx => ' $' + Number(ctx.parsed[indexAxis ? 'x' : 'y'] || 0).toLocaleString('es-MX', { minimumFractionDigits: 2 }) } }
+    },
     scales: {
       x: { ticks: { color: textColor, font: { size: 10 } }, grid: { color: gridColor, lineWidth: 1 }, border: { color: borderColor } },
       y: { ticks: { color: textColor, font: { size: 10 }, callback: v => '$' + Number(v).toLocaleString('es-MX', { minimumFractionDigits: 0 }) }, grid: { color: gridColor, lineWidth: 1 }, border: { color: borderColor } }
@@ -1613,11 +1676,11 @@ function renderAdmin() {
           <div style="font-size:.72rem;color:var(--text-muted)">${c.username} · <span style="color:var(--accent)">${c.rol}</span></div>
         </div>
         ${c.id !== 'c0'
-          ? `<button class="btn btn-secondary btn-sm" onclick="openEditChofer('${c.id}')" title="Editar rol">
+        ? `<button class="btn btn-secondary btn-sm" onclick="openEditChofer('${c.id}')" title="Editar rol">
                <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
              </button>
              <button class="btn btn-danger btn-sm" onclick="deleteChofer('${c.id}')">✕</button>`
-          : '<span style="font-size:.72rem;color:var(--text-muted)">Admin principal</span>'}
+        : '<span style="font-size:.72rem;color:var(--text-muted)">Admin principal</span>'}
       </div>`).join('')
     : '<p style="color:var(--text-muted);font-size:.85rem;text-align:center;padding:.75rem">Sin choferes</p>';
 
@@ -1641,18 +1704,18 @@ function renderAdmin() {
 function openEditChofer(id) {
   const c = DB.choferes.find(x => x.id === id);
   if (!c) return;
-  document.getElementById('edit-chofer-id').value     = c.id;
+  document.getElementById('edit-chofer-id').value = c.id;
   document.getElementById('edit-chofer-nombre').value = c.nombre;
-  document.getElementById('edit-chofer-pass').value   = '';
-  document.getElementById('edit-chofer-rol').value    = c.rol;
+  document.getElementById('edit-chofer-pass').value = '';
+  document.getElementById('edit-chofer-rol').value = c.rol;
   openModal('modal-edit-chofer');
 }
 
 async function saveEditChofer() {
-  const id     = document.getElementById('edit-chofer-id').value;
+  const id = document.getElementById('edit-chofer-id').value;
   const nombre = document.getElementById('edit-chofer-nombre').value.trim();
-  const pass   = document.getElementById('edit-chofer-pass').value;
-  const rol    = document.getElementById('edit-chofer-rol').value;
+  const pass = document.getElementById('edit-chofer-pass').value;
+  const rol = document.getElementById('edit-chofer-rol').value;
   if (!nombre) { toast('El nombre no puede estar vacío', 'warning'); return; }
   const choferes = [...DB.choferes];
   const idx = choferes.findIndex(c => c.id === id);
@@ -1665,7 +1728,7 @@ async function saveEditChofer() {
     closeModal('modal-edit-chofer');
     toast(`${nombre} actualizado correctamente`, 'success');
     renderAdmin();
-  } catch(e) { console.error(e); toast('Error al guardar cambios', 'error'); }
+  } catch (e) { console.error(e); toast('Error al guardar cambios', 'error'); }
 }
 
 function deleteChofer(id) {
@@ -1678,22 +1741,22 @@ function deleteChofer(id) {
       _cache.choferes = _cache.choferes.filter(c => c.id !== id);
       toast('Chofer eliminado', 'info');
       renderAdmin();
-    } catch(e) { toast('Error al eliminar', 'error'); }
+    } catch (e) { toast('Error al eliminar', 'error'); }
   };
 }
 
 function openEditUnidad(id) {
   const u = DB.unidades.find(x => x.id === id);
   if (!u) return;
-  document.getElementById('edit-unidad-id').value     = u.id;
-  document.getElementById('edit-unidad-placa').value  = u.placa;
+  document.getElementById('edit-unidad-id').value = u.id;
+  document.getElementById('edit-unidad-placa').value = u.placa;
   document.getElementById('edit-unidad-modelo').value = u.modelo;
   openModal('modal-edit-unidad');
 }
 
 async function saveEditUnidad() {
-  const id     = document.getElementById('edit-unidad-id').value;
-  const placa  = document.getElementById('edit-unidad-placa').value.trim().toUpperCase();
+  const id = document.getElementById('edit-unidad-id').value;
+  const placa = document.getElementById('edit-unidad-placa').value.trim().toUpperCase();
   const modelo = document.getElementById('edit-unidad-modelo').value.trim();
   if (!placa || !modelo) { toast('Completa placa y modelo', 'warning'); return; }
   const unidades = [...DB.unidades];
@@ -1706,7 +1769,7 @@ async function saveEditUnidad() {
     closeModal('modal-edit-unidad');
     toast('Unidad actualizada correctamente', 'success');
     renderAdmin();
-  } catch(e) { console.error(e); toast('Error al guardar', 'error'); }
+  } catch (e) { console.error(e); toast('Error al guardar', 'error'); }
 }
 
 function deleteUnidad(id) {
@@ -1719,36 +1782,36 @@ function deleteUnidad(id) {
       _cache.unidades = _cache.unidades.filter(u => u.id !== id);
       toast('Unidad eliminada', 'info');
       renderAdmin();
-    } catch(e) { toast('Error al eliminar', 'error'); }
+    } catch (e) { toast('Error al eliminar', 'error'); }
   };
 }
 
 function addChofer() {
   const nombre = document.getElementById('new-chofer-nombre').value.trim();
-  const user   = document.getElementById('new-chofer-user').value.trim();
-  const pass   = document.getElementById('new-chofer-pass').value;
-  const rol    = document.getElementById('new-chofer-rol').value;
+  const user = document.getElementById('new-chofer-user').value.trim();
+  const pass = document.getElementById('new-chofer-pass').value;
+  const rol = document.getElementById('new-chofer-rol').value;
   if (!nombre || !user || !pass) { toast('Completa todos los campos', 'warning'); return; }
   if (DB.choferes.find(c => c.username === user)) { toast('El usuario ya existe', 'error'); return; }
   const c = { id: uid(), nombre, username: user, password: pass, rol };
   fsSet('choferes', c.id, c).then(() => {
     _cache.choferes.push(c);
     closeModal('modal-nuevo-chofer');
-    ['new-chofer-nombre','new-chofer-user','new-chofer-pass'].forEach(id => document.getElementById(id).value = '');
+    ['new-chofer-nombre', 'new-chofer-user', 'new-chofer-pass'].forEach(id => document.getElementById(id).value = '');
     toast(`${nombre} agregado correctamente`, 'success');
     renderAdmin();
   }).catch(e => { console.error(e); toast('Error al agregar', 'error'); });
 }
 
 function addUnidad() {
-  const placa  = document.getElementById('new-unidad-placa').value.trim().toUpperCase();
+  const placa = document.getElementById('new-unidad-placa').value.trim().toUpperCase();
   const modelo = document.getElementById('new-unidad-modelo').value.trim();
   if (!placa || !modelo) { toast('Completa placa y modelo', 'warning'); return; }
   const u = { id: uid(), placa, modelo };
   fsSet('unidades', u.id, u).then(() => {
     _cache.unidades.push(u);
     closeModal('modal-nueva-unidad');
-    ['new-unidad-placa','new-unidad-modelo'].forEach(id => document.getElementById(id).value = '');
+    ['new-unidad-placa', 'new-unidad-modelo'].forEach(id => document.getElementById(id).value = '');
     toast('Unidad agregada correctamente', 'success');
     renderAdmin();
   }).catch(e => { console.error(e); toast('Error al agregar', 'error'); });
@@ -1763,19 +1826,19 @@ function renderPaginaUsuario() {
   const set = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
   set('usuario-avatar-grande', sesion.nombre.charAt(0).toUpperCase());
   set('usuario-nombre-grande', sesion.nombre);
-  set('usuario-rol-grande',    sesion.rol === 'admin' ? 'Administrador' : 'Chofer');
-  set('usuario-username',      sesion.username || '—');
-  set('usuario-tipo',          sesion.rol === 'admin' ? 'Administrador' : 'Chofer');
+  set('usuario-rol-grande', sesion.rol === 'admin' ? 'Administrador' : 'Chofer');
+  set('usuario-username', sesion.username || '—');
+  set('usuario-tipo', sesion.rol === 'admin' ? 'Administrador' : 'Chofer');
   // Limpiar campos de contraseña
-  ['cp-actual','cp-nueva','cp-confirmar'].forEach(id => {
+  ['cp-actual', 'cp-nueva', 'cp-confirmar'].forEach(id => {
     const el = document.getElementById(id); if (el) el.value = '';
   });
 }
 
 async function cambiarPassword() {
   const actual = document.getElementById('cp-actual').value;
-  const nueva  = document.getElementById('cp-nueva').value;
-  const conf   = document.getElementById('cp-confirmar').value;
+  const nueva = document.getElementById('cp-nueva').value;
+  const conf = document.getElementById('cp-confirmar').value;
   const sesion = DB.sesion;
   if (!actual || !nueva || !conf) { toast('Completa todos los campos', 'warning'); return; }
   if (nueva !== conf) { toast('Las contraseñas no coinciden', 'error'); return; }
@@ -1785,9 +1848,9 @@ async function cambiarPassword() {
   try {
     await fsSet('choferes', sesion.id, { ...chofer, password: nueva });
     _cache.choferes = _cache.choferes.map(c => c.id === sesion.id ? { ...c, password: nueva } : c);
-    ['cp-actual','cp-nueva','cp-confirmar'].forEach(id => document.getElementById(id).value = '');
+    ['cp-actual', 'cp-nueva', 'cp-confirmar'].forEach(id => document.getElementById(id).value = '');
     toast('Contraseña actualizada correctamente', 'success');
-  } catch(e) { toast('Error al actualizar', 'error'); }
+  } catch (e) { toast('Error al actualizar', 'error'); }
 }
 
 // ══════════════════════════════════════════════
@@ -1800,14 +1863,14 @@ function exportAllPDF() {
 
   const desde = document.getElementById('f-desde').value;
   const hasta = document.getElementById('f-hasta').value;
-  const filU  = document.getElementById('f-unidad').value;
-  const filC  = document.getElementById('f-chofer').value;
+  const filU = document.getElementById('f-unidad').value;
+  const filC = document.getElementById('f-chofer').value;
 
   reportes = reportes.filter(r => {
     if (desde && r.fecha < desde) return false;
     if (hasta && r.fecha > hasta) return false;
-    if (filU  && r.unidadId !== filU) return false;
-    if (filC  && r.chorerId !== filC) return false;
+    if (filU && r.unidadId !== filU) return false;
+    if (filC && r.chorerId !== filC) return false;
     return true;
   }).sort((a, b) => new Date(b.fecha) - new Date(a.fecha));
 
@@ -1828,7 +1891,7 @@ function exportAllPDF() {
   doc.line(14, 30, 283, 30);
 
   const totalI = reportes.reduce((s, r) => s + r.subtotalIngresos, 0);
-  const totalG = reportes.reduce((s, r) => s + r.subtotalGastos,   0);
+  const totalG = reportes.reduce((s, r) => s + r.subtotalGastos, 0);
   const totalU = totalI - totalG;
 
   doc.autoTable({
@@ -1845,10 +1908,10 @@ function exportAllPDF() {
     ]),
     foot: [['', '', '', 'TOTALES', '$' + totalI.toFixed(2), '$' + totalG.toFixed(2), '$' + totalU.toFixed(2)]],
     theme: 'striped',
-    headStyles: { fillColor: [245,245,248], textColor: [30,30,30], fontStyle: 'bold', lineColor: [210,210,215], lineWidth: 0.3 },
-    footStyles: { fillColor: [245,245,248], textColor: [30,30,30], fontStyle: 'bold', lineColor: [210,210,215], lineWidth: 0.3 },
-    styles: { fontSize: 8.5, cellPadding: 3, textColor: [30,30,30] },
-    alternateRowStyles: { fillColor: [250,250,252] },
+    headStyles: { fillColor: [245, 245, 248], textColor: [30, 30, 30], fontStyle: 'bold', lineColor: [210, 210, 215], lineWidth: 0.3 },
+    footStyles: { fillColor: [245, 245, 248], textColor: [30, 30, 30], fontStyle: 'bold', lineColor: [210, 210, 215], lineWidth: 0.3 },
+    styles: { fontSize: 8.5, cellPadding: 3, textColor: [30, 30, 30] },
+    alternateRowStyles: { fillColor: [250, 250, 252] },
     columnStyles: { 4: { halign: 'right' }, 5: { halign: 'right' }, 6: { halign: 'right', fontStyle: 'bold' } },
     showFoot: 'lastPage',
   });
@@ -1886,6 +1949,199 @@ function shareWhatsApp(id) {
 }
 
 // ══════════════════════════════════════════════
+//  RESERVAS DE VIAJES
+// ══════════════════════════════════════════════
+
+/** Actualiza el badge del bottom nav de reservas */
+function _actualizarBadgeReservas() {
+  const pendientes = (DB.reservas || []).filter(r => r.estado === 'pendiente').length;
+  const badge = document.getElementById('reservas-badge-bnav');
+  if (badge) {
+    badge.textContent = pendientes;
+    badge.style.display = pendientes > 0 ? 'flex' : 'none';
+  }
+}
+
+/** Construye una card de reserva para el dashboard del admin */
+function _buildReservaCard(rv) {
+  const chofer = DB.choferes.find(c => c.id === rv.chorerId);
+  return `
+  <div class="reserva-card">
+    <div class="reserva-card-header">
+      <div>
+        <div class="reserva-card-title">${rv.cliente || '—'} → ${rv.destino || '—'}</div>
+        <div class="reserva-card-sub">${fmtDate(rv.fecha)}${rv.hora ? ' · ' + fmtHora(rv.hora) : ''}</div>
+      </div>
+      <span class="reserva-badge-estado">Pendiente</span>
+    </div>
+    <div class="agenda-card-info" style="margin-bottom:.75rem">
+      ${rv.origen ? `<div class="agenda-info-item"><label>Origen</label><span>${rv.origen}</span></div>` : ''}
+      <div class="agenda-info-item"><label>Destino</label><span>${rv.destino}</span></div>
+      <div class="agenda-info-item"><label>Cliente</label><span>${rv.cliente || '—'}</span></div>
+      <div class="agenda-info-item"><label>Chofer</label><span style="color:var(--accent);font-weight:600">${chofer ? chofer.nombre : '—'}</span></div>
+      ${rv.flete ? `<div class="agenda-info-item"><label>Precio</label><span style="color:var(--success)">${fmt(rv.flete)}</span></div>` : ''}
+    </div>
+    ${rv.indicaciones ? `<div style="background:rgba(255,193,7,.08);border:1px solid rgba(255,193,7,.3);border-radius:var(--radius-sm);padding:.55rem .75rem;font-size:.82rem;margin-bottom:.75rem">
+      <span style="font-weight:700;font-size:.7rem;text-transform:uppercase;letter-spacing:.5px;color:#f59e0b">📋 Indicaciones</span><br>${rv.indicaciones}
+    </div>` : ''}
+    <div style="display:flex;gap:.6rem">
+      <button class="btn btn-success btn-sm" style="flex:1" onclick="aceptarReserva('${rv.id}')">
+        <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>
+        Aceptar
+      </button>
+      <button class="btn btn-danger btn-sm" style="flex:1" onclick="rechazarReserva('${rv.id}')">
+        <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        Rechazar
+      </button>
+    </div>
+  </div>`;
+}
+
+/** Inicializa el formulario de reserva del chofer (reutiliza estructura del viaje agenda) */
+function initFormReserva() {
+  const sesion = DB.sesion;
+  // Fecha por defecto
+  const fd = document.getElementById('res-fecha');
+  if (fd) fd.value = localDateStr();
+  // Limpiar campos
+  ['res-hora', 'res-cliente', 'res-origen', 'res-destino', 'res-flete', 'res-pago-chofer', 'res-indicaciones'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.value = '';
+  });
+  // Mostrar nombre del chofer
+  const choferEl = document.getElementById('res-chofer-display');
+  if (choferEl) choferEl.textContent = sesion.nombre;
+}
+
+/** El chofer envía una reserva */
+async function saveReserva() {
+  const sesion = DB.sesion;
+  const fecha = document.getElementById('res-fecha')?.value || '';
+  const hora = document.getElementById('res-hora')?.value || '';
+  const cliente = (document.getElementById('res-cliente')?.value || '').trim();
+  const origen = (document.getElementById('res-origen')?.value || '').trim();
+  const destino = (document.getElementById('res-destino')?.value || '').trim();
+  const flete = parseFloat(document.getElementById('res-flete')?.value) || 0;
+  const pagoChofer = parseFloat(document.getElementById('res-pago-chofer')?.value) || 0;
+  const indicaciones = (document.getElementById('res-indicaciones')?.value || '').trim();
+
+
+  if (!fecha) { toast('Selecciona la fecha del viaje', 'warning'); return; }
+  if (!destino) { toast('Ingresa el destino', 'warning'); return; }
+
+  const reserva = {
+    id: uid(),
+    fecha, hora, cliente, origen, destino, flete, pagoChofer, indicaciones,
+    chorerId: sesion.id,
+    choferNombre: sesion.nombre,
+    estado: 'pendiente',
+    creadoEn: new Date().toISOString(),
+  };
+
+  const btn = document.getElementById('btn-save-reserva');
+  if (btn) { btn.disabled = true; btn.innerHTML = '<div class="spinner"></div> Enviando...'; }
+
+  try {
+    await fsSet('reservas', reserva.id, reserva);
+    toast('✅ Reserva enviada. El admin la revisará pronto.', 'success');
+    initFormReserva();
+    navigate('dashboard');
+  } catch (e) {
+    console.error(e);
+    toast('Error al enviar la reserva. Intenta de nuevo.', 'error');
+  } finally {
+    if (btn) { btn.disabled = false; btn.innerHTML = '<svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M22 2L11 13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg> Enviar Reserva'; }
+  }
+}
+
+/** Admin rechaza una reserva → se elimina de Firestore */
+function rechazarReserva(id) {
+  openModal('modal-confirm');
+  document.getElementById('confirm-msg').textContent = '¿Rechazar esta reserva? Se eliminará permanentemente.';
+  document.getElementById('confirm-ok-btn').className = 'btn btn-danger';
+  document.getElementById('confirm-ok-btn').textContent = 'Rechazar';
+  document.getElementById('confirm-ok-btn').onclick = async () => {
+    closeModal('modal-confirm');
+    try {
+      await fsDelete('reservas', id);
+      _cache.reservas = _cache.reservas.filter(r => r.id !== id);
+      _actualizarBadgeReservas();
+      toast('Reserva rechazada y eliminada', 'info');
+      renderDashboard();
+    } catch (e) { toast('Error al rechazar', 'error'); }
+  };
+}
+
+/** Admin acepta una reserva → muestra modal para seleccionar unidad, luego convierte a viaje */
+function aceptarReserva(id) {
+  const rv = DB.reservas.find(r => r.id === id);
+  if (!rv) return;
+  // Guardar id de reserva en campo hidden
+  document.getElementById('arv-id').value = id;
+  // Poblar select de unidades
+  document.getElementById('arv-unidad').innerHTML =
+    '<option value="">Sin asignar</option>' +
+    DB.unidades.map(u => `<option value="${u.id}">${u.modelo} (${u.placa})</option>`).join('');
+  // Mostrar info de la reserva en el modal
+  const infoEl = document.getElementById('arv-info');
+  if (infoEl) {
+    const chofer = DB.choferes.find(c => c.id === rv.chorerId);
+    infoEl.innerHTML = `
+      <div style="background:var(--bg-input);border:1px solid var(--border);border-radius:var(--radius-sm);padding:.75rem 1rem;margin-bottom:.85rem">
+        <div style="font-size:.72rem;color:var(--text-muted);font-weight:700;text-transform:uppercase;letter-spacing:.5px;margin-bottom:.4rem">Reserva de ${chofer ? chofer.nombre : '—'}</div>
+        <div style="font-weight:600">${rv.cliente || '—'} → ${rv.destino}</div>
+        <div style="font-size:.82rem;color:var(--text-muted)">${fmtDate(rv.fecha)}${rv.hora ? ' · ' + fmtHora(rv.hora) : ''}</div>
+      </div>`;
+  }
+  openModal('modal-aceptar-reserva');
+}
+
+/** Confirma la aceptación: mueve la reserva a la colección "agenda" como viaje confirmado */
+async function confirmarAceptarReserva() {
+  const id = document.getElementById('arv-id').value;
+  const unidadId = document.getElementById('arv-unidad').value;
+  const rv = DB.reservas.find(r => r.id === id);
+  if (!rv) { toast('Reserva no encontrada', 'error'); return; }
+
+  const viaje = {
+    id: uid(),
+    fecha: rv.fecha,
+    hora: rv.hora || '',
+    cliente: rv.cliente || '',
+    origen: rv.origen || '',
+    destino: rv.destino,
+    flete: rv.flete || 0,
+    pagoChofer: rv.pagoChofer || 0,
+    indicaciones: rv.indicaciones || '',
+    chorerId: rv.chorerId,
+    unidadId: unidadId || '',
+    estado: 'pendiente',
+    creadoEn: new Date().toISOString(),
+    origenReserva: id,
+  };
+
+  const btn = document.getElementById('btn-confirmar-reserva');
+  if (btn) { btn.disabled = true; btn.innerHTML = '<div class="spinner"></div> Guardando...'; }
+
+  try {
+    // 1. Guardar como viaje en agenda
+    await fsSet('agenda', viaje.id, viaje);
+    // 2. Eliminar de reservas
+    await fsDelete('reservas', id);
+    _cache.reservas = _cache.reservas.filter(r => r.id !== id);
+    _actualizarBadgeReservas();
+    closeModal('modal-aceptar-reserva');
+    toast('✅ Reserva aceptada y convertida a viaje agendado', 'success');
+    renderDashboard();
+  } catch (e) {
+    console.error(e);
+    toast('Error al aceptar la reserva', 'error');
+  } finally {
+    if (btn) { btn.disabled = false; btn.innerHTML = '✅ Confirmar y Agendar'; }
+  }
+}
+
+// ══════════════════════════════════════════════
 //  ARRANQUE
 // ══════════════════════════════════════════════
 _fbReady.then(async () => {
@@ -1896,7 +2152,7 @@ _fbReady.then(async () => {
     try {
       await initDefaults();
       showApp();
-    } catch(e) {
+    } catch (e) {
       document.getElementById('login-btn').disabled = false;
       document.getElementById('login-btn').innerHTML = 'Iniciar Sesión';
     }
@@ -1909,13 +2165,13 @@ _fbReady.then(async () => {
 
 // ── Firebase Init ──
 const firebaseConfig = {
-      apiKey:            "AIzaSyANMpH5oor6DOuy5IaiU5LxLxxX5Vb5bik",
-      authDomain:        "basetransportesmelgar.firebaseapp.com",
-      projectId:         "basetransportesmelgar",
-      storageBucket:     "basetransportesmelgar.firebasestorage.app",
-      messagingSenderId: "440678791212",
-      appId:             "1:440678791212:web:a45ca9a46a7c285fab7989"
-    };
-    firebase.initializeApp(firebaseConfig);
-    window._db = firebase.firestore();
-    window._firebaseReady = true;
+  apiKey: "AIzaSyANMpH5oor6DOuy5IaiU5LxLxxX5Vb5bik",
+  authDomain: "basetransportesmelgar.firebaseapp.com",
+  projectId: "basetransportesmelgar",
+  storageBucket: "basetransportesmelgar.firebasestorage.app",
+  messagingSenderId: "440678791212",
+  appId: "1:440678791212:web:a45ca9a46a7c285fab7989"
+};
+firebase.initializeApp(firebaseConfig);
+window._db = firebase.firestore();
+window._firebaseReady = true;

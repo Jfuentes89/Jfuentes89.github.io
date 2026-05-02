@@ -202,6 +202,7 @@
           </div>
 
           <div id="viajes-asignados-container"></div>
+          <div id="admin-reservas-container"></div>
           <div class="metric-grid" id="metrics-grid"></div>
 
           <div id="admin-agenda-resumen"></div>
@@ -365,7 +366,74 @@
           </div>
         </div>
 
-        <!-- ══ HISTORIAL ══ -->
+        <!-- ══ RESERVA DE VIAJE (Chofer) ══ -->
+        <div class="page" id="page-reserva">
+          <div class="page-header">
+            <div>
+              <h1>Reservar Viaje</h1>
+              <p>Solicita un viaje al administrador</p>
+            </div>
+          </div>
+
+          <div class="card">
+            <!-- Info chofer -->
+            <div style="display:flex;align-items:center;gap:.75rem;padding:.75rem 1rem;background:rgba(26,120,120,.08);border:1px solid rgba(26,120,120,.2);border-radius:var(--radius-sm);margin-bottom:1.25rem">
+              <div style="width:36px;height:36px;border-radius:50%;background:linear-gradient(135deg,var(--accent),var(--accent-2));display:flex;align-items:center;justify-content:center;font-family:var(--font-title);font-size:1.1rem;color:#fff;flex-shrink:0">🚐</div>
+              <div>
+                <div style="font-size:.7rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;font-weight:700">Solicitud enviada por</div>
+                <div id="res-chofer-display" style="font-weight:600;font-size:.95rem">—</div>
+              </div>
+            </div>
+
+            <!-- Datos del viaje -->
+            <div class="form-grid">
+              <div class="form-group">
+                <label>Fecha del viaje <span style="color:var(--danger)">*</span></label>
+                <input type="date" id="res-fecha">
+              </div>
+              <div class="form-group">
+                <label>Hora de salida</label>
+                <input type="time" id="res-hora">
+              </div>
+              <div class="form-group">
+                <label>Cliente</label>
+                <input type="text" id="res-cliente" placeholder="Nombre del cliente">
+              </div>
+              <div class="form-group">
+                <label>Origen</label>
+                <input type="text" id="res-origen" placeholder="Lugar de origen">
+              </div>
+              <div class="form-group">
+                <label>Destino <span style="color:var(--danger)">*</span></label>
+                <input type="text" id="res-destino" placeholder="Ciudad o lugar de destino">
+              </div>
+              <div class="form-group">
+                <label>Precio de viaje</label>
+                <input type="number" id="res-flete" placeholder="$0.00" min="0" step="0.01">
+              </div>
+              <div class="form-group">
+                <label>Pago de chófer</label>
+                <input type="number" id="res-pago-chofer" placeholder="$0.00" min="0" step="0.01">
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label>Indicaciones adicionales</label>
+              <textarea id="res-indicaciones" placeholder="Notas, instrucciones especiales..." rows="3"
+                style="resize:vertical;width:100%;padding:.65rem .9rem;background:var(--bg-input);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text-primary);font-family:var(--font-body);font-size:.88rem"></textarea>
+            </div>
+
+            <div style="display:flex;gap:.75rem;justify-content:flex-end;margin-top:1.5rem;flex-wrap:wrap">
+              <button class="btn btn-secondary" onclick="initFormReserva()">Limpiar</button>
+              <button class="btn btn-primary" id="btn-save-reserva" onclick="saveReserva()">
+                <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M22 2L11 13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+                Enviar Reserva
+              </button>
+            </div>
+          </div>
+        </div>
+
+
         <div class="page" id="page-historial">
           <div class="page-header">
             <div>
@@ -630,14 +698,18 @@
     <nav class="bottom-nav" id="bottom-nav">
       <div class="bottom-nav-items">
         <button class="bottom-nav-item active" id="bnav-dashboard" onclick="navigate('dashboard')">
-          <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-            <rect x="3" y="3" width="7" height="7" rx="1" />
-            <rect x="14" y="3" width="7" height="7" rx="1" />
-            <rect x="3" y="14" width="7" height="7" rx="1" />
-            <rect x="14" y="14" width="7" height="7" rx="1" />
-          </svg>
+          <div style="position:relative">
+            <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <rect x="3" y="3" width="7" height="7" rx="1" />
+              <rect x="14" y="3" width="7" height="7" rx="1" />
+              <rect x="3" y="14" width="7" height="7" rx="1" />
+              <rect x="14" y="14" width="7" height="7" rx="1" />
+            </svg>
+            <span class="reservas-badge" id="reservas-badge-bnav"></span>
+          </div>
           <span>Inicio</span>
         </button>
+
         <button class="bottom-nav-item" id="bnav-historial" onclick="navigate('historial')">
           <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
             <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
@@ -658,6 +730,21 @@
             </svg>
           </div>
           <span>Nuevo</span>
+        </button>
+
+        <!-- Botón Reservar Viaje — Solo chofer -->
+        <button class="bottom-nav-item" id="bnav-reserva" style="display:none" onclick="navigate('reserva')">
+          <div style="position:relative">
+            <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <rect x="3" y="4" width="18" height="18" rx="2" />
+              <line x1="16" y1="2" x2="16" y2="6" />
+              <line x1="8" y1="2" x2="8" y2="6" />
+              <line x1="3" y1="10" x2="21" y2="10" />
+              <line x1="12" y1="14" x2="12" y2="18" />
+              <line x1="10" y1="16" x2="14" y2="16" />
+            </svg>
+          </div>
+          <span>Reservar</span>
         </button>
 
         <button class="bottom-nav-item" id="bnav-agenda" style="display:none" onclick="navigate('agenda')">
@@ -890,6 +977,37 @@
   <!-- ══════════════════════════════════════════
      MODAL — Confirmación de eliminación
 ══════════════════════════════════════════ -->
+
+  <!-- ══════════════════════════════════════════
+     MODAL — Aceptar Reserva (seleccionar unidad)
+══════════════════════════════════════════ -->
+  <div class="modal-overlay" id="modal-aceptar-reserva">
+    <div class="modal" style="max-width:420px">
+      <div class="modal-header">
+        <h3>✅ Aceptar Reserva</h3>
+        <button class="btn-icon" onclick="closeModal('modal-aceptar-reserva')">
+          <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <line x1="18" y1="6" x2="6" y2="18" />
+            <line x1="6" y1="6" x2="18" y2="18" />
+          </svg>
+        </button>
+      </div>
+      <div class="modal-body" style="display:flex;flex-direction:column;gap:.85rem">
+        <div id="arv-info"></div>
+        <div class="form-group">
+          <label>Asignar Microbús / Unidad</label>
+          <select id="arv-unidad"></select>
+        </div>
+        <input type="hidden" id="arv-id">
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeModal('modal-aceptar-reserva')">Cancelar</button>
+        <button class="btn btn-success" id="btn-confirmar-reserva" onclick="confirmarAceptarReserva()">✅ Confirmar y Agendar</button>
+      </div>
+    </div>
+  </div>
+
+
   <!-- ══════════════════════════════════════════
      MODAL — Nuevo Viaje Agenda
 ══════════════════════════════════════════ -->
