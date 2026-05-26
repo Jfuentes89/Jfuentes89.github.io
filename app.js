@@ -617,47 +617,80 @@ function renderDashboard() {
   }
 
 
-  // ── Actividad reciente (últimos 5 del mes para ambos roles) ──
-  const recientes = [...reportesMes]
-    .sort((a, b) => new Date(b.fecha) - new Date(a.fecha))
-    .slice(0, 5);
-
   // Siempre actualizar tarjetas de viajes asignados para el chofer
   if (esChofer) {
     const viajesContainer = document.getElementById('viajes-asignados-container');
     if (viajesContainer) viajesContainer.innerHTML = renderViajesChofer(sesion);
   }
 
+  // ── Historial de Viajes Reservados ──
+  // Mostrar botón "Nueva Reserva" solo para choferes
+  const btnVerReservas = document.getElementById('btn-ver-reservas');
+  if (btnVerReservas) btnVerReservas.style.display = esChofer ? '' : 'none';
+
   const al = document.getElementById('activity-list');
-  if (!recientes.length) {
-    al.innerHTML = '<div class="empty-state"><p>Sin actividad registrada este mes.</p></div>';
+
+  // Construir lista: reservas pendientes + viajes de agenda originados en reservas
+  let listaReservas = [];
+  if (esChofer) {
+    const pendientes = (DB.reservas || [])
+      .filter(r => r.chorerId === sesion.id)
+      .map(r => ({ ...r, _tipo: 'pendiente' }));
+    const aceptadas = (DB.agenda || [])
+      .filter(v => v.chorerId === sesion.id && v.origenReserva)
+      .map(v => ({ ...v, _tipo: 'aceptado' }));
+    listaReservas = [...pendientes, ...aceptadas]
+      .sort((a, b) => new Date(b.creadoEn || b.fecha) - new Date(a.creadoEn || a.fecha));
+  } else {
+    const pendientes = (DB.reservas || []).map(r => ({ ...r, _tipo: 'pendiente' }));
+    const aceptadas = (DB.agenda || [])
+      .filter(v => v.origenReserva)
+      .map(v => ({ ...v, _tipo: 'aceptado' }));
+    listaReservas = [...pendientes, ...aceptadas]
+      .sort((a, b) => new Date(b.creadoEn || b.fecha) - new Date(a.creadoEn || a.fecha));
+  }
+
+  if (!listaReservas.length) {
+    al.innerHTML = '<div class="empty-state"><p>Sin reservas registradas.</p></div>';
     return;
   }
 
-  if (esChofer) {
-    al.innerHTML = recientes.map(r => `
-      <div class="activity-item" onclick="showDetalle('${r.id}')">
-        <div class="activity-badge" style="background:var(--success)"></div>
+  al.innerHTML = listaReservas.map(item => {
+    const esPendiente = item._tipo === 'pendiente';
+    const chofer = DB.choferes.find(c => c.id === item.chorerId);
+    const estadoColor = esPendiente ? '#f59e0b' : 'var(--success)';
+    const estadoLabel = esPendiente ? 'Pendiente' : 'Aceptado';
+
+    if (esChofer) {
+      return `
+      <div class="activity-item" style="cursor:pointer" onclick="showDetalleReserva('${item.id}','${item._tipo}')">
+        <div class="activity-badge" style="background:${estadoColor}"></div>
         <div class="activity-info">
-          <strong>${r.cliente || 'Sin cliente'} — ${r.destino || ''}</strong>
-          <span>${fmtDate(r.fecha)} · ${r.unidadPlaca}</span>
+          <strong>${item.cliente || 'Sin cliente'} → ${item.destino || '—'}</strong>
+          <span>${fmtDate(item.fecha)}${item.hora ? ' · ' + fmtHora(item.hora) : ''}</span>
         </div>
-        <div class="activity-amount positive">${fmt(r.subtotalIngresos)}</div>
-      </div>`).join('');
-  } else {
-    al.innerHTML = recientes.map(r => {
-      const pos = r.utilidad >= 0;
-      return `<div class="activity-item" onclick="showDetalle('${r.id}')">
-        <div class="activity-badge" style="background:${pos ? 'var(--success)' : 'var(--danger)'}"></div>
-        <div class="activity-info">
-          <strong>${r.cliente || 'Sin cliente'} — ${r.destino || ''}</strong>
-          <span>${fmtDate(r.fecha)} · ${r.unidadPlaca} · ${r.choferNombre}</span>
-        </div>
-        <div class="activity-amount ${pos ? 'positive' : 'negative'}">${fmt(r.utilidad)}</div>
+        <span style="font-size:.7rem;font-weight:700;color:${estadoColor};text-transform:uppercase;letter-spacing:.5px;flex-shrink:0">${estadoLabel}</span>
       </div>`;
-    }).join('');
-  }
-  // ── Actividad reciente, viajes asignados ya renderizados arriba ──
+    } else {
+      return `
+      <div class="activity-item" style="cursor:pointer" onclick="showDetalleReserva('${item.id}','${item._tipo}')">
+        <div class="activity-badge" style="background:${estadoColor}"></div>
+        <div class="activity-info">
+          <strong>${item.cliente || '—'} → ${item.destino || '—'}</strong>
+          <span>${fmtDate(item.fecha)} · ${chofer ? chofer.nombre : '—'}</span>
+        </div>
+        <div style="display:flex;flex-direction:column;align-items:flex-end;gap:.25rem;flex-shrink:0" onclick="event.stopPropagation()">
+          <span style="font-size:.7rem;font-weight:700;color:${estadoColor};text-transform:uppercase;letter-spacing:.5px">${estadoLabel}</span>
+          ${esPendiente ? `
+          <div style="display:flex;gap:.35rem">
+            <button class="btn btn-success btn-sm" onclick="aceptarReserva('${item.id}')">&#10003; Aceptar</button>
+            <button class="btn btn-danger btn-sm" onclick="rechazarReserva('${item.id}')">&#10005;</button>
+          </div>` : ''}
+        </div>
+      </div>`;
+    }
+  }).join('');
+  // ── Historial de reservas renderizado ──
 }
 
 // ══════════════════════════════════════════════
@@ -1951,6 +1984,83 @@ function shareWhatsApp(id) {
 // ══════════════════════════════════════════════
 //  RESERVAS DE VIAJES
 // ══════════════════════════════════════════════
+
+// ══════════════════════════════════════════════
+//  DETALLE DE RESERVA (modal)
+// ══════════════════════════════════════════════
+
+/**
+ * Muestra el detalle de una reserva o de un viaje agendado que vino de una reserva.
+ * @param {string} id  - ID del documento
+ * @param {'pendiente'|'aceptado'} tipo - si viene de DB.reservas o DB.agenda
+ */
+function showDetalleReserva(id, tipo) {
+  const esAdmin = DB.sesion && DB.sesion.rol === 'admin';
+
+  let item;
+  if (tipo === 'pendiente') {
+    item = (DB.reservas || []).find(r => r.id === id);
+  } else {
+    item = (DB.agenda || []).find(v => v.id === id);
+  }
+  if (!item) return;
+
+  const chofer = DB.choferes.find(c => c.id === item.chorerId);
+  const unidad = DB.unidades.find(u => u.id === item.unidadId);
+  const estadoColor = tipo === 'pendiente' ? '#f59e0b' : 'var(--success)';
+  const estadoLabel = tipo === 'pendiente' ? 'Pendiente' : 'Aceptado';
+
+  // Título del modal
+  const tituloEl = document.getElementById('modal-reserva-titulo');
+  if (tituloEl) tituloEl.textContent = tipo === 'pendiente' ? '🚐 Reserva de Viaje' : '✅ Viaje Reservado';
+
+  // Cuerpo
+  document.getElementById('modal-reserva-body').innerHTML = `
+    <div style="margin-bottom:1rem;display:flex;align-items:center;gap:.75rem">
+      <span style="display:inline-block;padding:.3rem .85rem;border-radius:999px;font-size:.72rem;font-weight:700;
+        text-transform:uppercase;letter-spacing:.6px;color:#fff;
+        background:${tipo === 'pendiente' ? 'linear-gradient(135deg,#f59e0b,#fbbf24)' : 'linear-gradient(135deg,#36B25F,#57D5D5)'}">
+        ${estadoLabel}
+      </span>
+      ${chofer ? `<span style="font-size:.82rem;color:var(--text-muted)">Solicitado por <strong>${chofer.nombre}</strong></span>` : ''}
+    </div>
+
+    <div class="detail-row"><span>Fecha</span><span>${fmtDate(item.fecha)}</span></div>
+    ${item.hora ? `<div class="detail-row"><span>Hora de salida</span><span>${fmtHora(item.hora)}</span></div>` : ''}
+    ${item.cliente ? `<div class="detail-row"><span>Cliente</span><span>${item.cliente}</span></div>` : ''}
+    ${item.origen ? `<div class="detail-row"><span>Origen</span><span>${item.origen}</span></div>` : ''}
+    <div class="detail-row"><span>Destino</span><span>${item.destino || '\u2014'}</span></div>
+    ${item.flete ? `<div class="detail-row"><span>Precio de viaje</span><span class="positive">${fmt(item.flete)}</span></div>` : ''}
+    ${item.pagoChofer ? `<div class="detail-row"><span>Pago de ch\u00f3fer</span><span>${fmt(item.pagoChofer)}</span></div>` : ''}
+    ${unidad ? `<div class="detail-row"><span>Unidad asignada</span><span>${unidad.modelo} (${unidad.placa})</span></div>` : ''}
+    ${item.indicaciones ? `
+      <div style="margin-top:.75rem;background:rgba(255,193,7,.08);border:1px solid rgba(255,193,7,.3);
+        border-radius:var(--radius-sm);padding:.65rem .85rem;font-size:.82rem">
+        <div style="font-weight:700;font-size:.7rem;text-transform:uppercase;letter-spacing:.5px;
+          color:#f59e0b;margin-bottom:.35rem">&#128203; Indicaciones</div>
+        ${item.indicaciones}
+      </div>` : ''}
+  `;
+
+  // Footer: si es admin y la reserva está pendiente, mostrar Aceptar/Rechazar
+  const footer = document.getElementById('modal-reserva-footer');
+  if (esAdmin && tipo === 'pendiente') {
+    footer.innerHTML = `
+      <button class="btn btn-secondary" onclick="closeModal('modal-detalle-reserva')">Cerrar</button>
+      <button class="btn btn-danger" onclick="closeModal('modal-detalle-reserva');rechazarReserva('${id}')">
+        <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        Rechazar
+      </button>
+      <button class="btn btn-success" onclick="closeModal('modal-detalle-reserva');aceptarReserva('${id}')">
+        <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>
+        Aceptar
+      </button>`;
+  } else {
+    footer.innerHTML = `<button class="btn btn-secondary" onclick="closeModal('modal-detalle-reserva')">Cerrar</button>`;
+  }
+
+  openModal('modal-detalle-reserva');
+}
 
 /** Actualiza el badge del bottom nav de reservas */
 function _actualizarBadgeReservas() {
