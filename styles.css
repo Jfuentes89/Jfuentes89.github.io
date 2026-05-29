@@ -1709,3 +1709,94 @@ textarea {
 #admin-reservas-container:empty {
   display: none;
 }
+
+/* ══════════════════════════════════════════
+   VER RUTA — RASTREO EN TIEMPO REAL
+══════════════════════════════════════════ */
+
+/* Botón "Ver Ruta" — Gradiente morado-cian con glow */
+.btn-ruta {
+  background: linear-gradient(135deg, #9D5DD9, #57D5D5);
+  color: #fff;
+  border: none;
+  box-shadow: 0 3px 14px rgba(157, 93, 217, 0.45);
+  font-weight: 700;
+  letter-spacing: .3px;
+  transition: all .18s;
+}
+
+.btn-ruta:hover {
+  filter: brightness(1.12);
+  box-shadow: 0 5px 20px rgba(157, 93, 217, 0.65);
+  transform: translateY(-1px);
+}
+
+.btn-ruta:active {
+  transform: scale(.96);
+}
+
+/* Punto pulsante de estado GPS */
+.ruta-pulse-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #9D5DD9;
+  position: relative;
+  flex-shrink: 0;
+  animation: gpsRipple 1.8s ease-in-out infinite;
+}
+
+.ruta-pulse-dot::after {
+  content: '';
+  position: absolute;
+  inset: -4px;
+  border-radius: 50%;
+  background: rgba(157, 93, 217, 0.35);
+  animation: gpsRipple 1.8s ease-in-out infinite;
+}
+
+@keyframes gpsRipple {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%       { opacity: .55; transform: scale(1.35); }
+}
+
+/* Chips de info del viaje en el header del modal del mapa */
+.ruta-info-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: .4rem;
+  padding: .3rem .75rem;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  font-size: .75rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  white-space: nowrap;
+}
+
+/* Mapa Leaflet: aseguramos que no desborde el modal */
+#ver-ruta-map .leaflet-container {
+  border-radius: 0;
+}
+
+/* Animación del marcador del chofer en el mapa */
+@keyframes pulseMarker {
+  0%, 100% { box-shadow: 0 3px 12px rgba(157, 93, 217, 0.60); transform: scale(1); }
+  50%       { box-shadow: 0 3px 24px rgba(157, 93, 217, 0.90); transform: scale(1.08); }
+}
+
+/* Modal ver-ruta: ancho grande para el mapa */
+#modal-ver-ruta .modal {
+  padding: 0;
+}
+
+#modal-ver-ruta .modal-header {
+  padding: 1rem 1.25rem;
+  border-bottom: 1px solid var(--border);
+}
+
+#modal-ver-ruta .modal-footer {
+  padding: .85rem 1.25rem;
+  border-top: 1px solid var(--border);
+}

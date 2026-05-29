@@ -640,14 +640,14 @@ function renderDashboard() {
       .filter(v => v.chorerId === sesion.id && v.origenReserva)
       .map(v => ({ ...v, _tipo: 'aceptado' }));
     listaReservas = [...pendientes, ...aceptadas]
-      .sort((a, b) => new Date(b.creadoEn || b.fecha) - new Date(a.creadoEn || a.fecha));
+      .sort((a, b) => new Date(a.fecha || a.creadoEn) - new Date(b.fecha || b.creadoEn));
   } else {
     const pendientes = (DB.reservas || []).map(r => ({ ...r, _tipo: 'pendiente' }));
     const aceptadas = (DB.agenda || [])
       .filter(v => v.origenReserva)
       .map(v => ({ ...v, _tipo: 'aceptado' }));
     listaReservas = [...pendientes, ...aceptadas]
-      .sort((a, b) => new Date(b.creadoEn || b.fecha) - new Date(a.creadoEn || a.fecha));
+      .sort((a, b) => new Date(a.fecha || a.creadoEn) - new Date(b.fecha || b.creadoEn));
   }
 
   if (!listaReservas.length) {
@@ -1094,6 +1094,11 @@ function _buildAgendaCard(v) {
     </div>
     <div class="agenda-card-actions">
       ${btnAsignar}
+      ${estado === 'en-ruta' ? `
+      <button class="btn btn-ruta btn-sm" onclick="openVerRuta('${v.id}')">
+        <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v4M12 18v4M2 12h4M18 12h4"/></svg>
+        📍 Ver Ruta
+      </button>` : ''}
       ${(estado === 'pendiente' || estado === 'sin-chofer' || estado === 'aceptado') ? `
       <button class="btn btn-secondary btn-sm" onclick="openEditViajeAgenda('${v.id}')">
         <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
@@ -1375,6 +1380,8 @@ function choferIniciarViaje(id) {
 async function choferFinalizarViaje(id) {
   const viaje = DB.agenda.find(v => v.id === id);
   if (!viaje) return;
+  // Detener rastreo GPS
+  stopGeoTracking();
   // Guardar id para marcar completado al guardar el reporte
   window._viajeAgendaIdPendiente = id;
   navigate('nuevo-reporte');
@@ -2248,6 +2255,317 @@ async function confirmarAceptarReserva() {
     toast('Error al aceptar la reserva', 'error');
   } finally {
     if (btn) { btn.disabled = false; btn.innerHTML = '✅ Confirmar y Agendar'; }
+  }
+}
+
+// ══════════════════════════════════════════════
+//  RASTREO GPS EN TIEMPO REAL
+// ══════════════════════════════════════════════
+
+// Estado del rastreo GPS (lado chofer)
+const _geo = {
+  watchId: null,
+  viajeId: null,
+  ultimoPush: 0,
+};
+
+/**
+ * Inicia el rastreo GPS del chofer para el viaje dado.
+ * Guarda ubicación en Firestore colección 'geolocations'.
+ * Se llama cuando el chofer cambia estado a 'en-ruta'.
+ */
+function startGeoTracking(viajeId) {
+  if (!navigator.geolocation) {
+    toast('Tu dispositivo no tiene GPS disponible', 'warning');
+    return;
+  }
+  // Detener tracking anterior si existe
+  stopGeoTracking();
+  _geo.viajeId = viajeId;
+
+  // Inicializar documento en Firestore (borrar puntos anteriores)
+  _fdb().collection('geolocations').doc(viajeId).set({
+    lat: null, lng: null, updatedAt: null,
+    puntos: [],
+    viajeId,
+    activo: true,
+  }).catch(e => console.warn('Error init geo:', e));
+
+  _geo.watchId = navigator.geolocation.watchPosition(
+    pos => _onGeoSuccess(pos),
+    err => console.warn('GPS error:', err),
+    { enableHighAccuracy: true, maximumAge: 10000, timeout: 15000 }
+  );
+  console.log('[GEO] Rastreo iniciado para viaje', viajeId);
+}
+
+/** Detiene el rastreo GPS del chofer */
+function stopGeoTracking() {
+  if (_geo.watchId !== null) {
+    navigator.geolocation.clearWatch(_geo.watchId);
+    _geo.watchId = null;
+  }
+  // Marcar como inactivo en Firestore
+  if (_geo.viajeId) {
+    _fdb().collection('geolocations').doc(_geo.viajeId)
+      .update({ activo: false }).catch(() => {});
+    _geo.viajeId = null;
+  }
+}
+
+/** Callback al recibir nueva posición GPS */
+async function _onGeoSuccess(pos) {
+  const { latitude: lat, longitude: lng, accuracy } = pos.coords;
+  const ts = new Date().toISOString();
+  const ahora = Date.now();
+
+  // Enviar a Firestore máximo cada 8 segundos para no saturar
+  if (ahora - _geo.ultimoPush < 8000) return;
+  _geo.ultimoPush = ahora;
+
+  const docRef = _fdb().collection('geolocations').doc(_geo.viajeId);
+  try {
+    // Agrega el punto al array de la ruta
+    await docRef.update({
+      lat, lng, updatedAt: ts, accuracy,
+      puntos: firebase.firestore.FieldValue.arrayUnion({ lat, lng, ts }),
+    });
+  } catch (e) {
+    // Si el doc no existe aún, crearlo
+    await docRef.set({
+      lat, lng, updatedAt: ts, accuracy,
+      puntos: [{ lat, lng, ts }],
+      viajeId: _geo.viajeId,
+      activo: true,
+    });
+  }
+}
+
+// ====================================================
+// ADMIN: ver ruta en tiempo real
+// ====================================================
+
+// Estado del mapa del admin
+const _mapaRuta = {
+  mapa: null,
+  marcador: null,
+  polyline: null,
+  unsubscribe: null,
+  viajeId: null,
+  ultimaPos: null,
+};
+
+/**
+ * Admin abre el modal del mapa para ver la ubicación en tiempo real.
+ * @param {string} viajeId
+ */
+function openVerRuta(viajeId) {
+  const viaje = DB.agenda.find(v => v.id === viajeId);
+  if (!viaje) return;
+
+  _mapaRuta.viajeId = viajeId;
+
+  // Mostrar info del viaje en el encabezado del modal
+  const chofer = DB.choferes.find(c => c.id === viaje.chorerId);
+  const unidad = DB.unidades.find(u => u.id === viaje.unidadId);
+  document.getElementById('ver-ruta-titulo').textContent =
+    `📍 ${viaje.cliente || 'Viaje'} → ${viaje.destino}`;
+  document.getElementById('ver-ruta-info').innerHTML = [
+    chofer  ? `<div class="ruta-info-chip"><svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>${chofer.nombre}</div>` : '',
+    unidad  ? `<div class="ruta-info-chip"><svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="1" y="3" width="15" height="13" rx="2"/><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg>${unidad.modelo} (${unidad.placa})</div>` : '',
+    viaje.fecha ? `<div class="ruta-info-chip"><svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>${fmtDate(viaje.fecha)}</div>` : '',
+    viaje.horaInicio ? `<div class="ruta-info-chip" style="color:#57D5D5"><svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>Inició: ${viaje.horaInicio}</div>` : '',
+  ].filter(Boolean).join('');
+
+  // Abrir modal
+  document.getElementById('modal-ver-ruta').classList.add('show');
+
+  // Inicializar el mapa de Leaflet (diferido para que el modal sea visible)
+  setTimeout(() => _initMapaRuta(viajeId), 150);
+}
+
+/** Inicializa el mapa Leaflet y suscribe a actualizaciones en tiempo real */
+function _initMapaRuta(viajeId) {
+  // Destruir mapa anterior si existe
+  if (_mapaRuta.mapa) {
+    _mapaRuta.mapa.remove();
+    _mapaRuta.mapa = null;
+    _mapaRuta.marcador = null;
+    _mapaRuta.polyline = null;
+  }
+  // Cancelar suscripción anterior
+  if (_mapaRuta.unsubscribe) {
+    _mapaRuta.unsubscribe();
+    _mapaRuta.unsubscribe = null;
+  }
+
+  // Crear mapa centrado en Centroamérica (El Salvador) por defecto
+  const map = L.map('ver-ruta-map', { zoomControl: true }).setView([13.7942, -88.8965], 8);
+  _mapaRuta.mapa = map;
+
+  // Tiles OpenStreetMap (gratuito, sin API key)
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+    maxZoom: 19,
+  }).addTo(map);
+
+  // Ícono personalizado del camión
+  const iconoCamion = L.divIcon({
+    className: '',
+    html: `<div style="
+      width:38px;height:38px;
+      background:linear-gradient(135deg,#9D5DD9,#57D5D5);
+      border-radius:50%;border:3px solid #fff;
+      display:flex;align-items:center;justify-content:center;
+      font-size:18px;box-shadow:0 3px 12px rgba(157,93,217,.6);
+      animation:pulseMarker 2s ease-in-out infinite;
+    ">🚐</div>`,
+    iconSize: [38, 38],
+    iconAnchor: [19, 19],
+  });
+
+  // Ícono de inicio de ruta
+  const iconoInicio = L.divIcon({
+    className: '',
+    html: `<div style="
+      width:28px;height:28px;
+      background:linear-gradient(135deg,#36B25F,#57D5D5);
+      border-radius:50%;border:2px solid #fff;
+      display:flex;align-items:center;justify-content:center;
+      font-size:14px;box-shadow:0 2px 8px rgba(54,178,95,.5);
+    ">🏁</div>`,
+    iconSize: [28, 28],
+    iconAnchor: [14, 14],
+  });
+
+  // Marcador actual (posición del chofer)
+  _mapaRuta.marcador = L.marker([13.7942, -88.8965], { icon: iconoCamion })
+    .addTo(map)
+    .bindPopup('<strong>Chofer</strong><br>Esperando GPS...');
+
+  // Polyline de la ruta (color morado-cian)
+  _mapaRuta.polyline = L.polyline([], {
+    color: '#9D5DD9',
+    weight: 4,
+    opacity: 0.85,
+    dashArray: null,
+  }).addTo(map);
+
+  _mapaRuta.marcadorInicio = null;
+  _mapaRuta.iconoInicio = iconoInicio;
+
+  // Suscribir a cambios en tiempo real de Firestore
+  _mapaRuta.unsubscribe = _fdb()
+    .collection('geolocations')
+    .doc(viajeId)
+    .onSnapshot(doc => {
+      if (!doc.exists) {
+        _setRutaStatus('Sin datos GPS aún. El chofer debe tener el GPS activo.', false);
+        return;
+      }
+      const data = doc.data();
+      _actualizarMapaRuta(data);
+    }, err => {
+      console.warn('Geo snapshot error:', err);
+      _setRutaStatus('Error al recibir datos GPS', false);
+    });
+}
+
+/** Actualiza el marcador y polyline con los datos de Firestore */
+function _actualizarMapaRuta(data) {
+  if (!data || !data.lat || !data.lng) {
+    _setRutaStatus('Esperando primera ubicación GPS del chofer...', false);
+    return;
+  }
+
+  const { lat, lng, updatedAt, puntos = [], activo } = data;
+  const latlng = [lat, lng];
+  _mapaRuta.ultimaPos = latlng;
+
+  // Actualizar marcador del chofer
+  if (_mapaRuta.marcador) {
+    _mapaRuta.marcador.setLatLng(latlng);
+    const hora = updatedAt ? new Date(updatedAt).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true }) : '—';
+    _mapaRuta.marcador.setPopupContent(`<strong>🚐 Chofer en ruta</strong><br><span style="font-size:.8rem">Actualizado: ${hora}</span>`);
+  }
+
+  // Actualizar polyline con todos los puntos
+  if (_mapaRuta.polyline && puntos.length > 1) {
+    const coords = puntos.map(p => [p.lat, p.lng]);
+    _mapaRuta.polyline.setLatLngs(coords);
+
+    // Colocar marcador de inicio una sola vez
+    if (!_mapaRuta.marcadorInicio) {
+      _mapaRuta.marcadorInicio = L.marker(coords[0], { icon: _mapaRuta.iconoInicio })
+        .addTo(_mapaRuta.mapa)
+        .bindPopup('🏁 Inicio del viaje');
+    }
+  }
+
+  // Mostrar estado
+  const hora = updatedAt ? new Date(updatedAt).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true }) : '—';
+  const puntosCount = puntos.length;
+  const km = _calcKmRuta(puntos);
+  _setRutaStatus(
+    `📍 Posición actualizada: ${hora}  ·  ${puntosCount} puntos registrados  ·  ~${km} km recorridos`,
+    activo !== false
+  );
+}
+
+/** Calcula km aproximados de la ruta usando distancia Haversine */
+function _calcKmRuta(puntos) {
+  if (!puntos || puntos.length < 2) return '0.0';
+  let total = 0;
+  for (let i = 1; i < puntos.length; i++) {
+    total += _haversineKm(puntos[i - 1].lat, puntos[i - 1].lng, puntos[i].lat, puntos[i].lng);
+  }
+  return total.toFixed(1);
+}
+
+function _haversineKm(lat1, lng1, lat2, lng2) {
+  const R = 6371;
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLng = (lng2 - lng1) * Math.PI / 180;
+  const a = Math.sin(dLat / 2) ** 2 + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLng / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+/** Actualiza el texto de estado del GPS en el modal */
+function _setRutaStatus(msg, activo) {
+  const el = document.getElementById('ver-ruta-status');
+  if (!el) return;
+  const dot = el.querySelector('.ruta-pulse-dot');
+  if (dot) dot.style.background = activo ? '#9D5DD9' : '#f59e0b';
+  const span = el.querySelector('span');
+  if (span) span.textContent = msg;
+}
+
+/** Admin: centra el mapa en la posición actual del chofer */
+function centrarMapaEnChofer() {
+  if (_mapaRuta.mapa && _mapaRuta.ultimaPos) {
+    _mapaRuta.mapa.setView(_mapaRuta.ultimaPos, 15, { animate: true });
+    if (_mapaRuta.marcador) _mapaRuta.marcador.openPopup();
+  } else {
+    toast('Sin posición GPS disponible aún', 'warning');
+  }
+}
+
+/** Cierra el modal del mapa y limpia recursos */
+function closeVerRuta() {
+  document.getElementById('modal-ver-ruta').classList.remove('show');
+  // Cancelar suscripción Firestore
+  if (_mapaRuta.unsubscribe) {
+    _mapaRuta.unsubscribe();
+    _mapaRuta.unsubscribe = null;
+  }
+  // Destruir mapa Leaflet
+  if (_mapaRuta.mapa) {
+    _mapaRuta.mapa.remove();
+    _mapaRuta.mapa = null;
+    _mapaRuta.marcador = null;
+    _mapaRuta.polyline = null;
+    _mapaRuta.marcadorInicio = null;
+    _mapaRuta.ultimaPos = null;
   }
 }
 

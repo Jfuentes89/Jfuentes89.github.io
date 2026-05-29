@@ -15,6 +15,10 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
 
+  <!-- Leaflet (mapas interactivos, sin API key) -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
 
 
 
@@ -1383,6 +1387,44 @@
       <div class="modal-body" id="modal-reserva-body"></div>
       <div class="modal-footer" id="modal-reserva-footer">
         <button class="btn btn-secondary" onclick="closeModal('modal-detalle-reserva')">Cerrar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════
+     MODAL — Ver Ruta en Tiempo Real
+══════════════════════════════════════════ -->
+  <div class="modal-overlay" id="modal-ver-ruta">
+    <div class="modal" style="max-width:680px;width:95vw">
+      <div class="modal-header">
+        <div style="display:flex;align-items:center;gap:.75rem">
+          <div class="ruta-pulse-dot"></div>
+          <h3 id="ver-ruta-titulo">📍 En Ruta</h3>
+        </div>
+        <button class="btn-icon" onclick="closeVerRuta()">
+          <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <line x1="18" y1="6" x2="6" y2="18" />
+            <line x1="6" y1="6" x2="18" y2="18" />
+          </svg>
+        </button>
+      </div>
+      <div class="modal-body" style="padding:0">
+        <!-- Info del viaje -->
+        <div id="ver-ruta-info" style="padding:.85rem 1.25rem;display:flex;flex-wrap:wrap;gap:.75rem;border-bottom:1px solid var(--border);background:var(--bg-input)"></div>
+        <!-- Mapa -->
+        <div id="ver-ruta-map" style="height:420px;width:100%;background:#1a1a2e"></div>
+        <!-- Estado GPS -->
+        <div id="ver-ruta-status" style="padding:.6rem 1.25rem;font-size:.75rem;color:var(--text-muted);display:flex;align-items:center;gap:.5rem;border-top:1px solid var(--border)">
+          <div class="ruta-pulse-dot" style="width:8px;height:8px"></div>
+          <span>Esperando señal GPS...</span>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeVerRuta()">Cerrar</button>
+        <button class="btn btn-primary" id="btn-centrar-mapa" onclick="centrarMapaEnChofer()">
+          <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v4M12 18v4M2 12h4M18 12h4"/></svg>
+          Centrar en Chofer
+        </button>
       </div>
     </div>
   </div>
