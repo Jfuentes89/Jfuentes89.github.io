@@ -473,6 +473,19 @@ function localDateStr(offsetDays = 0) {
 }
 
 function renderDashboard() {
+  // ── Auto-eliminar reservas cuya fecha ya pasó ──
+  const hoyStr = localDateStr();
+  const vencidas = (DB.reservas || []).filter(r => r.fecha && r.fecha < hoyStr);
+  if (vencidas.length) {
+    vencidas.forEach(async r => {
+      try {
+        await fsDelete('reservas', r.id);
+        _cache.reservas = _cache.reservas.filter(x => x.id !== r.id);
+      } catch (e) { console.warn('No se pudo eliminar reserva vencida', r.id); }
+    });
+    _actualizarBadgeReservas();
+  }
+
   const sesion = DB.sesion;
   const esChofer = sesion.rol === 'chofer';
 
@@ -1047,17 +1060,154 @@ function showDetalle(id) {
 
   document.getElementById('modal-share-btn').onclick = () => shareWhatsApp(id);
   const editBtn = document.getElementById('modal-edit-btn');
-  if (DB.sesion.rol === 'chofer') {
-    editBtn.style.display = 'none';
-  } else {
-    editBtn.style.display = '';
-    editBtn.onclick = () => openEditReporte(id);
-  }
+  editBtn.style.display = '';
+  editBtn.onclick = () => openEditReporte(id);
   openModal('modal-detalle');
 }
 
 // ══════════════════════════════════════════════
-//  ADMINISTRACIÓN
+//  EDITAR REPORTE
+// ══════════════════════════════════════════════
+function openEditReporte(id) {
+  const esChofer = DB.sesion && DB.sesion.rol === 'chofer';
+  const r = DB.reportes.find(x => x.id === id);
+  if (!r) return;
+  closeModal('modal-detalle');
+
+  if (esChofer) {
+    // Chofer: solo puede editar entregado a, diesel y otros gastos
+    document.getElementById('erc-id').value = r.id;
+    document.getElementById('erc-entregado').value = r.entregadoA || '';
+    const dieselGasto = (r.gastos || []).find(g => g.concepto && g.concepto.toLowerCase().includes('diesel'));
+    document.getElementById('erc-diesel').value = dieselGasto ? dieselGasto.monto : '';
+    // Gastos extra (sin diesel ni pago de chófer)
+    const otrosGastos = (r.gastos || []).filter(g => {
+      const c = g.concepto ? g.concepto.toLowerCase() : '';
+      return !c.includes('diesel') && !c.includes('pago de ch');
+    });
+    const lista = document.getElementById('erc-gastos-list');
+    lista.innerHTML = '';
+    otrosGastos.forEach(g => {
+      const div = document.createElement('div');
+      div.className = 'dynamic-item with-label';
+      div.innerHTML = `
+        <input type="text" value="${g.concepto}" placeholder="Concepto" style="${inputStyle()}">
+        <input type="number" value="${g.monto}" placeholder="Monto" min="0" step="0.01" style="${inputStyle()}">
+        <button class="remove-item-btn" onclick="this.parentElement.remove()">&#x2715;</button>`;
+      lista.appendChild(div);
+    });
+    openModal('modal-edit-reporte-chofer');
+  } else {
+    // Admin: edición completa
+    document.getElementById('er-id').value = r.id;
+    document.getElementById('er-fecha').value = r.fecha || '';
+    document.getElementById('er-cliente').value = r.cliente || '';
+    document.getElementById('er-destino').value = r.destino || '';
+    document.getElementById('er-entregado').value = r.entregadoA || '';
+    document.getElementById('er-flete').value = r.flete || '';
+    const dieselG = (r.gastos || []).find(g => g.concepto && g.concepto.toLowerCase().includes('diesel'));
+    const pagoG = (r.gastos || []).find(g => g.concepto && g.concepto.toLowerCase().includes('pago de ch'));
+    document.getElementById('er-diesel').value = dieselG ? dieselG.monto : '';
+    document.getElementById('er-pago-chofer').value = pagoG ? pagoG.monto : '';
+    openModal('modal-edit-reporte');
+  }
+}
+
+async function saveEditReporte() {
+  const id = document.getElementById('er-id').value;
+  const fecha = document.getElementById('er-fecha').value;
+  const cliente = document.getElementById('er-cliente').value.trim();
+  const destino = document.getElementById('er-destino').value.trim();
+  const entregadoA = document.getElementById('er-entregado').value.trim();
+  const flete = parseFloat(document.getElementById('er-flete').value) || 0;
+  const diesel = parseFloat(document.getElementById('er-diesel').value) || 0;
+  const pagoChofer = parseFloat(document.getElementById('er-pago-chofer').value) || 0;
+
+  if (!fecha || !cliente || !destino) { toast('Completa fecha, cliente y destino', 'warning'); return; }
+
+  const r = DB.reportes.find(x => x.id === id);
+  if (!r) { toast('Reporte no encontrado', 'error'); return; }
+
+  // Reconstruir gastos manteniendo los que no son diesel ni pago-chofer
+  const otrosGastos = (r.gastos || []).filter(g => {
+    const c = g.concepto ? g.concepto.toLowerCase() : '';
+    return !c.includes('diesel') && !c.includes('pago de ch');
+  });
+  const gastos = [
+    ...(diesel > 0 ? [{ concepto: 'Diesel', monto: diesel }] : []),
+    ...(pagoChofer > 0 ? [{ concepto: 'Pago de chófer', monto: pagoChofer }] : []),
+    ...otrosGastos,
+  ];
+  const ingresosExtra = r.ingresosExtra || [];
+  const subtotalIngresos = flete + ingresosExtra.reduce((s, i) => s + i.monto, 0);
+  const subtotalGastos = gastos.reduce((s, g) => s + g.monto, 0);
+  const utilidad = subtotalIngresos - subtotalGastos;
+
+  const actualizado = { ...r, fecha, cliente, destino, entregadoA, flete, gastos, subtotalIngresos, subtotalGastos, utilidad };
+
+  try {
+    await fsSet('reportes', id, actualizado);
+    const idx = _cache.reportes.findIndex(x => x.id === id);
+    if (idx !== -1) _cache.reportes[idx] = actualizado;
+    closeModal('modal-edit-reporte');
+    toast('Reporte actualizado correctamente ✓', 'success');
+    renderHistorial();
+  } catch (e) { console.error(e); toast('Error al guardar', 'error'); }
+}
+
+async function saveEditReporteChofer() {
+  const id = document.getElementById('erc-id').value;
+  const entregadoA = document.getElementById('erc-entregado').value.trim();
+  const diesel = parseFloat(document.getElementById('erc-diesel').value) || 0;
+
+  const r = DB.reportes.find(x => x.id === id);
+  if (!r) { toast('Reporte no encontrado', 'error'); return; }
+
+  // Recopilar otros gastos dinámicos
+  const otrosDinamicos = [];
+  document.querySelectorAll('#erc-gastos-list .dynamic-item').forEach(row => {
+    const ins = row.querySelectorAll('input');
+    const concepto = ins[0]?.value?.trim();
+    const monto = parseFloat(ins[1]?.value) || 0;
+    if (concepto && monto > 0) otrosDinamicos.push({ concepto, monto });
+  });
+
+  // Mantener gastos que no sean diesel ni otros dinámicos (ej: pago de chófer)
+  const gastosFijos = (r.gastos || []).filter(g => {
+    const c = g.concepto ? g.concepto.toLowerCase() : '';
+    return !c.includes('diesel') && c.includes('pago de ch');
+  });
+  const gastos = [
+    ...(diesel > 0 ? [{ concepto: 'Diesel', monto: diesel }] : []),
+    ...gastosFijos,
+    ...otrosDinamicos,
+  ];
+  const subtotalGastos = gastos.reduce((s, g) => s + g.monto, 0);
+  const utilidad = (r.subtotalIngresos || 0) - subtotalGastos;
+
+  const actualizado = { ...r, entregadoA, gastos, subtotalGastos, utilidad };
+
+  try {
+    await fsSet('reportes', id, actualizado);
+    const idx = _cache.reportes.findIndex(x => x.id === id);
+    if (idx !== -1) _cache.reportes[idx] = actualizado;
+    closeModal('modal-edit-reporte-chofer');
+    toast('Reporte actualizado correctamente ✓', 'success');
+    renderHistorial();
+  } catch (e) { console.error(e); toast('Error al guardar', 'error'); }
+}
+
+function addGastoChoferEdit() {
+  const lista = document.getElementById('erc-gastos-list');
+  const div = document.createElement('div');
+  div.className = 'dynamic-item with-label';
+  div.innerHTML = `
+    <input type="text" placeholder="Concepto" style="${inputStyle()}">
+    <input type="number" placeholder="Monto" min="0" step="0.01" style="${inputStyle()}">
+    <button class="remove-item-btn" onclick="this.parentElement.remove()">&#x2715;</button>`;
+  lista.appendChild(div);
+}
+
 // ══════════════════════════════════════════════
 // ══════════════════════════════════════════════
 //  AGENDA DE VIAJES
@@ -2063,7 +2213,14 @@ function showDetalleReserva(id, tipo) {
         Aceptar
       </button>`;
   } else {
-    footer.innerHTML = `<button class="btn btn-secondary" onclick="closeModal('modal-detalle-reserva')">Cerrar</button>`;
+    // Botón cancelar reservación visible para todos
+    const esPendiente = tipo === 'pendiente';
+    footer.innerHTML = `
+      <button class="btn btn-secondary" onclick="closeModal('modal-detalle-reserva')">Cerrar</button>
+      <button class="btn btn-danger" onclick="closeModal('modal-detalle-reserva');cancelarReserva('${id}','${tipo}')">
+        <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        Cancelar reservación
+      </button>`;
   }
 
   openModal('modal-detalle-reserva');
@@ -2172,6 +2329,30 @@ async function saveReserva() {
 }
 
 /** Admin rechaza una reserva → se elimina de Firestore */
+/** Cancela (elimina) una reserva o viaje aceptado originado en reserva, con confirmación */
+function cancelarReserva(id, tipo) {
+  openModal('modal-confirm');
+  document.getElementById('confirm-msg').textContent = '¿Estás seguro de que deseas cancelar esta reservación? Esta acción no se puede deshacer.';
+  document.getElementById('confirm-ok-btn').className = 'btn btn-danger';
+  document.getElementById('confirm-ok-btn').textContent = 'Sí, cancelar';
+  document.getElementById('confirm-ok-btn').onclick = async () => {
+    closeModal('modal-confirm');
+    try {
+      if (tipo === 'pendiente') {
+        await fsDelete('reservas', id);
+        _cache.reservas = _cache.reservas.filter(r => r.id !== id);
+        _actualizarBadgeReservas();
+      } else {
+        // Es un viaje aceptado en agenda (origenReserva)
+        await fsDelete('agenda', id);
+        _cache.agenda = _cache.agenda.filter(v => v.id !== id);
+      }
+      toast('Reservación cancelada', 'info');
+      renderDashboard();
+    } catch (e) { toast('Error al cancelar', 'error'); }
+  };
+}
+
 function rechazarReserva(id) {
   openModal('modal-confirm');
   document.getElementById('confirm-msg').textContent = '¿Rechazar esta reserva? Se eliminará permanentemente.';
